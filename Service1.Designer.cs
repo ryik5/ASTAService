@@ -33,6 +33,7 @@
             this.CanStop = true;
             this.CanPauseAndContinue = true;
             this.AutoLog = true;
+            
         }
 
         #endregion

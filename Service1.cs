@@ -10,6 +10,7 @@ using System.ServiceProcess;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace ASTAService
 {
@@ -42,9 +43,10 @@ namespace ASTAService
         {
             while (true)
             {
+                MessageBox.Show("Start");
                 // log.Info("Doing work...");
                 // do some work, then
-                Thread.Sleep(1000);
+                Thread.Sleep(5000);
             }
         }
     }
