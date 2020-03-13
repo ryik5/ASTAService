@@ -4,14 +4,16 @@ using System.Linq;
 using System.ServiceProcess;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace ASTAService
 {
     static class Program
     {
         /// <summary>
-        /// The main entry point for the application.
+        /// The main entry point for the application
         /// </summary>
+        /// <param name="args"> Parameters for install: ASTAService.exe -i, uninstall: ASTAService.exe -u </param>
         static void Main(string[] args)
         {
             var service = new AstaServiceLocal();
@@ -33,20 +35,20 @@ namespace ASTAService
                         case "install":
                         case "i":
                             if (!ServiceInstallerUtility.Install())
-                                Console.WriteLine("Failed to install service");
+                                MessageBox.Show("Failed to install service");
                             else
                             {
                                 service.Start();
-                                Console.WriteLine("Running service");
+                                MessageBox.Show("Running service");
                             }
                             break;
                         case "uninstall":
                         case "u":
                             service.Stop();
                             if (!ServiceInstallerUtility.Uninstall())
-                                Console.WriteLine("Failed to uninstall service");
-                            else 
-                                Console.WriteLine("Service stopped. Goodbye.");
+                                MessageBox.Show("Failed to uninstall service");
+                            else
+                                MessageBox.Show("Service stopped. Goodbye.");
                             //"taskkill /f /IM astaservice.exe";
                             break;
                         default:
