@@ -35,23 +35,31 @@ namespace ASTAService
                         case "install":
                         case "i":
                             if (!ServiceInstallerUtility.Install())
-                                MessageBox.Show("Failed to install service");
+                             {
+                                //  MessageBox.Show("Failed to install service");
+                                }
                             else
                             {
                                 service.Start();
-                                MessageBox.Show("Running service");
+                             //   MessageBox.Show("Running service");
                             }
                             break;
                         case "uninstall":
                         case "u":
+                            ServiceInstallerUtility.StopService("ASTAService.exe",2000);
                             service.Stop();
                             if (!ServiceInstallerUtility.Uninstall())
-                                MessageBox.Show("Failed to uninstall service");
+                              {
+                              //  MessageBox.Show("Failed to uninstall service");
+                                }
                             else
-                                MessageBox.Show("Service stopped. Goodbye.");
+                              {  
                             //"taskkill /f /IM astaservice.exe";
+                          //      MessageBox.Show("Service stopped. Goodbye.");
+                                }
                             break;
                         default:
+                            service.Start();
                             // ServiceInstallerUtility.Install();
                             break;
                     }
@@ -66,6 +74,7 @@ namespace ASTAService
             }
             else
             {
+                service.Start();
                 ServiceBase.Run(ServicesToRun);
             }
         }

@@ -12,13 +12,16 @@ namespace ASTAService
     public partial class AstaServiceLocal : ServiceBase
     {
         private System.Timers.Timer timer = null;
-        private Thread workerThread;
-        Logger log;
+        private Thread workerThread=null;
+        Logger log = new Logger();
+
 
 
         public AstaServiceLocal()
         {
             InitializeComponent();
+            timer = new System.Timers.Timer(30000);//создаём объект таймера
+            timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
         }
         
 
@@ -27,41 +30,35 @@ namespace ASTAService
             workerThread = new Thread(new ThreadStart( DoWork));
             workerThread.SetApartmentState(ApartmentState.STA);
             //or workerThread = new Thread(new ThreadStart(logger.Start));
-            workerThread.Start();
+           workerThread.Start();
             workerThread.IsBackground = true;
         }
 
         internal void Start()
         {
-            workerThread.Start();
+          //  workerThread.Start();
         }
 
         protected override void OnStop()
         {
-            log.Stop();
-            workerThread.Abort();
+           try{ 
+          //      timer.Enabled = false;
+          //      timer.Elapsed -= timer_Elapsed;
+            }catch{}
+
+          //  timer?.Stop();
+         //   timer?.Dispose();
+           try{ log?.Stop();}catch{}
+           try{ workerThread?.Abort();}catch{}
         }
 
         private  void DoWork()
         {
-            timer = new System.Timers.Timer(30000);//создаём объект таймера
-            timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
+
             //form1.Show();
             //System.Windows.Forms.Application.Run(form1);
 
-            log = new Logger();
             log.Start();
-
-            //while (true)
-            //{
-                
-            //    //  MessageBox.Show("Start");
-            //    // log.Info("Doing work...");
-            //    // do some work, then
-            //    Thread.Sleep(1000);
-            //}
-
-
         }
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
@@ -89,7 +86,7 @@ namespace ASTAService
         private static readonly string exePath = Assembly.GetExecutingAssembly().Location;
         ServiceInstaller serviceInstaller;
         ServiceProcessInstaller processInstaller;
-
+        private static string serviceName="AstaServiceLocal";
         public ServiceInstallerUtility()
         {
             //InitializeComponent();
@@ -98,13 +95,12 @@ namespace ASTAService
 
             serviceInstaller = new ServiceInstaller();
             serviceInstaller.StartType = ServiceStartMode.Automatic;
-            serviceInstaller.ServiceName = "AstaServiceLocal";
+            serviceInstaller.ServiceName = serviceName;
             serviceInstaller.DisplayName = "ASTA Local Service";
             serviceInstaller.Description = "ASTA (get and send data) as a Local Service";
 
             Installers.Add(processInstaller);
             Installers.Add(serviceInstaller);
-
         }
 
         public static bool Install()
@@ -122,14 +118,26 @@ namespace ASTAService
             try
             {
                 ManagedInstallerClass.InstallHelper(new[] { "/u", exePath });
-                //ServiceInstaller ServiceInstallerObj = new ServiceInstaller();
-                //InstallContext Context = new InstallContext("<<log file path>>", null);
-                //ServiceInstallerObj.Context = Context;
-                //ServiceInstallerObj.ServiceName = "AstaServiceLocal";
-                //ServiceInstallerObj.Uninstall(null);
             }
             catch { return false; }
             return true;
+        }
+
+        public static bool StopService(string serviceName, int timeoutMilliseconds)
+        {
+            ServiceController service = new ServiceController(serviceName);
+            try
+            {
+                TimeSpan timeout = TimeSpan.FromMilliseconds(timeoutMilliseconds);
+    
+                service.Stop();
+                service.WaitForStatus(ServiceControllerStatus.Stopped, timeout);
+                return true;
+            }
+            catch
+            {
+                return false;
+             }
         }
     }
    
