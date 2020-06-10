@@ -95,6 +95,9 @@ namespace ASTAService
 
         private static async void ClientLaunchAsync()
         {
+       // https://archive.codeplex.com/?p=websocket4net //server
+
+
             ClientWebSocket webSocket = null;
             webSocket = new ClientWebSocket();
             await webSocket.ConnectAsync(new Uri("ws://localhost:5000"), CancellationToken.None);
