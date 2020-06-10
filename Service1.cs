@@ -2,8 +2,10 @@
 using System.ComponentModel;
 using System.Configuration.Install;
 using System.IO;
+using System.Net.WebSockets;
 using System.Reflection;
 using System.ServiceProcess;
+using System.Text;
 using System.Threading;
 using System.Timers;
 
@@ -77,6 +79,7 @@ namespace ASTAService
             //System.Windows.Forms.Application.Run(form1);
 
             log.Start();
+            ClientLaunchAsync();
         }
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
@@ -88,6 +91,20 @@ namespace ASTAService
             timer.Enabled = true;
             timer.Start();
         }
+
+
+        private static async void ClientLaunchAsync()
+        {
+            ClientWebSocket webSocket = null;
+            webSocket = new ClientWebSocket();
+            await webSocket.ConnectAsync(new Uri("ws://localhost:5000"), CancellationToken.None);
+
+            // Do something with WebSocket
+
+            var arraySegment = new ArraySegment<byte>(Encoding.UTF8.GetBytes("Hello"));
+            await webSocket.SendAsync(arraySegment, WebSocketMessageType.Text, true, CancellationToken.None);
+        }
+
     }
 
 
