@@ -18,10 +18,10 @@ namespace WebSocketServer
         {
             InitializeComponent();
             ServerLaunchAsync();
-            Listener();
+          //  Listener();
         }
 
-        private void Listener()
+        private void Listener() //another way 
         {
             var listener = new TcpListener(IPAddress.Loopback, 8080);
             listener.Start();
@@ -112,6 +112,8 @@ namespace WebSocketServer
             return buffer;
         }
 
+
+        //use it
         private static async void ServerLaunchAsync()
         {
             var httpListener = new HttpListener();
