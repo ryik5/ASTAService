@@ -1,10 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.ServiceProcess;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 
 namespace ASTAService
 {
@@ -17,6 +12,12 @@ namespace ASTAService
         static void Main(string[] args)
         {
             var service = new AstaServiceLocal();
+            if (args?.Length > 0)
+            {
+                foreach(var str in args)
+                service.WriteString(str);
+            }
+
             ServiceBase[] ServicesToRun;
 
             ServicesToRun = new ServiceBase[]
@@ -27,36 +28,40 @@ namespace ASTAService
             if (Environment.UserInteractive)
             {
                 // Разбор пути для саморегистрации
-                if (args != null && args[0].Length > 1
-                    && (args[0].StartsWith("-") || args[0].StartsWith("/")))
+                if (args?.Length>0 && args[0].Length > 1
+                    && (args[0].StartsWith("-") || args[0].StartsWith("/") || args[0].StartsWith(" ")))
                 {
                     switch (args[0].Substring(1).ToLower())
                     {
                         case "install":
                         case "i":
                             if (!ServiceInstallerUtility.Install())
-                             {
+                            {
                                 //  MessageBox.Show("Failed to install service");
-                                }
+                            }
                             else
                             {
                                 service.Start();
-                             //   MessageBox.Show("Running service");
+                                //   MessageBox.Show("Running service");
                             }
                             break;
                         case "uninstall":
                         case "u":
-                            ServiceInstallerUtility.StopService("ASTAService.exe",2000);
+                            ServiceInstallerUtility.StopService("ASTAService.exe", 2000);
                             service.Stop();
                             if (!ServiceInstallerUtility.Uninstall())
-                              {
-                              //  MessageBox.Show("Failed to uninstall service");
-                                }
+                            {
+                                //  MessageBox.Show("Failed to uninstall service");
+                            }
                             else
-                              {  
-                            //"taskkill /f /IM astaservice.exe";
-                          //      MessageBox.Show("Service stopped. Goodbye.");
-                                }
+                            {
+                                //"taskkill /f /IM astaservice.exe";
+                                //      MessageBox.Show("Service stopped. Goodbye.");
+                            }
+                            break;
+                        case "Start":
+                        case "s":
+                            service.Start();
                             break;
                         default:
                             service.Start();
