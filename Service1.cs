@@ -17,7 +17,8 @@ namespace ASTAService
         private System.Timers.Timer timer = null;
         private Thread workerThread = null;
         private Thread webThread = null;
-        FileWatchLogger log = null;
+        DirectoryWatchLogger direcoryWatcherlog = null;
+        Logger log = null;
 
         WebSocketManager webSocket;
         static string webSocketUri;
@@ -26,15 +27,7 @@ namespace ASTAService
         public AstaServiceLocal()
         {
             InitializeComponent();
-
-            log = new FileWatchLogger(@"d:\temp");
-            webSocketUri = "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
-            
-            webSocket = new WebSocketManager(webSocketUri);
-            webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(WebSocket_EvntInfoMessage);
-
-            timer = new System.Timers.Timer(10000);//создаём объект таймера
-            timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
+            log = new Logger();
         }
 
 
@@ -47,13 +40,23 @@ namespace ASTAService
         {
             if (workerThread == null)
             {
-                workerThread = new Thread(new ThreadStart(DoWork));
-                workerThread.SetApartmentState(ApartmentState.STA);
+                workerThread = new Thread(new ThreadStart(StartLog));
+                workerThread.SetApartmentState(ApartmentState.STA); //ApartmentState.STA - поток надолго НЕ ЗАНИМАТЬ!
                 workerThread.IsBackground = true;
             }
 
-            workerThread.Start();
+            if (webThread == null)
+            {
+                webThread = new Thread(new ThreadStart(StartWebSocket));
+                webThread.SetApartmentState(ApartmentState.STA);
+                webThread.IsBackground = true;
+            }
 
+            workerThread.Start();
+            webThread.Start();
+
+            timer = new System.Timers.Timer(10000);//создаём объект таймера
+            timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
             timer.Enabled = true;
             timer.Start();
         }
@@ -73,18 +76,30 @@ namespace ASTAService
             }
             catch { }
 
-            try { log?.Stop(); } catch { }
+            try { direcoryWatcherlog?.StopWatcher(); } catch { }
             try { workerThread?.Abort(); } catch { }
         }
 
         public void WriteString(string text)
         {
-            log.WriteString(text);
+            if(log != null)
+                log.WriteString(text);
         }
 
-        private void DoWork()
+        private void StartLog()
         {
-            log.Start();
+            direcoryWatcherlog = new DirectoryWatchLogger();
+            direcoryWatcherlog.SetDirWatcher(@"d:\temp");
+
+            direcoryWatcherlog.StartWatcher();
+        }
+
+        private void StartWebSocket()
+        {
+            webSocketUri = "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
+
+            webSocket = new WebSocketManager(webSocketUri);
+            webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(WebSocket_EvntInfoMessage);
         }
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
@@ -94,7 +109,7 @@ namespace ASTAService
             log.WriteString("Check working Elapsed");
             
             //Запускаем процедуру (чего хотим выполнить по таймеру).
-            webSocket.Send("{\"time\": 1}");
+            webSocket.Send("{\"time\": 1}"); //test webSocketServer
             webSocket.Send("{\"ping\": 1}");
 
             //  Task.Run(()=>  ClientSendAsync( "Hello"));
@@ -108,6 +123,7 @@ namespace ASTAService
             log.WriteString(e.Message);
         }
     }
+
 
 
     /// <summary>
@@ -192,6 +208,7 @@ namespace ASTAService
             }
         }
     }
+
 
     public class WindowsServiceClass
     {
@@ -293,12 +310,19 @@ namespace ASTAService
     }
 
 
-    public class FileWatchLogger
+    public class DirectoryWatchLogger
     {
         System.IO.FileSystemWatcher watcher;
         readonly object obj = new object();
         bool enabled = true;
-        public FileWatchLogger(string pathToDir)
+
+        public DirectoryWatchLogger() { }
+        public DirectoryWatchLogger(string pathToDir)
+        {
+            SetDirWatcher(pathToDir);
+        }
+
+        public void SetDirWatcher(string pathToDir)
         {
             watcher = new System.IO.FileSystemWatcher(pathToDir);
             watcher.IncludeSubdirectories = true;
@@ -308,7 +332,7 @@ namespace ASTAService
             watcher.Renamed += Watcher_Renamed;
         }
 
-        public void Start()
+        public void StartWatcher()
         {
             watcher.EnableRaisingEvents = true;
             while (enabled)
@@ -316,14 +340,14 @@ namespace ASTAService
                 Thread.Sleep(1000);
             }
         }
-        public void Stop()
+        public void StopWatcher()
         {
             watcher.EnableRaisingEvents = false;
             enabled = false;
         }
         public void WriteString(string text)
         {
-            RecordEntry("WriteString", text, System.IO.WatcherChangeTypes.Created);
+            RecordEntry("Message", text);
         }
         // переименование файлов
         private void Watcher_Renamed(object sender, System.IO.RenamedEventArgs e)
@@ -357,14 +381,26 @@ namespace ASTAService
 
         private void RecordEntry(string fileEvent, string filePath, System.IO.WatcherChangeTypes typo)
         {
-            //
             string path = Assembly.GetExecutingAssembly().Location;
             string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
             lock (obj)
             {
-                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))//"D:\\templog.txt"
+                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))
                 {
-                    writer.WriteLine($"{DateTime.Now.ToString("yyyy.MM.dd hh:mm:ss")}|{typo}|{filePath} был {fileEvent}");
+                    writer.WriteLine($"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{typo}|{filePath}");
+                    writer.Flush();
+                }
+            }
+        }
+        private void RecordEntry(string eventText, string text)
+        {
+            string path = Assembly.GetExecutingAssembly().Location;
+            string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
+            lock (obj)
+            {
+                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))
+                {
+                    writer.WriteLine($"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{eventText}|{text}");
                     writer.Flush();
                 }
             }
@@ -372,7 +408,34 @@ namespace ASTAService
     }
 
 
+    public class Logger
+    {
+        System.IO.FileSystemWatcher watcher;
+        readonly object obj = new object();
+        bool enabled = true;
 
+        public Logger() { }
+
+        public void WriteString(string text)
+        {
+            RecordEntry("Message", text);
+        }
+        private void RecordEntry(string eventText, string text)
+        {
+            string path = Assembly.GetExecutingAssembly().Location;
+            string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
+            lock (obj)
+            {
+                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))
+                {
+                    writer.WriteLine($"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{eventText}|{text}");
+                    writer.Flush();
+                }
+            }
+        }
+    }
+
+    
     public class WebSocketManager
     {
         private AutoResetEvent messageReceiveEvent = new AutoResetEvent(false);

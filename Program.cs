@@ -14,8 +14,8 @@ namespace ASTAService
             var service = new AstaServiceLocal();
             if (args?.Length > 0)
             {
-                foreach(var str in args)
-                service.WriteString(str);
+                foreach (var str in args)
+                    service.WriteString($"Got environment argument '{str}'");
             }
 
             ServiceBase[] ServicesToRun;
