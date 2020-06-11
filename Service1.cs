@@ -1,8 +1,6 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Configuration.Install;
-using System.IO;
-using System.Net.WebSockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.ServiceProcess;
@@ -10,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
+using WebSocket4Net;
 
 namespace ASTAService
 {
@@ -19,6 +18,8 @@ namespace ASTAService
         private Thread workerThread = null;
         FileWatchLogger log = null;
 
+        WebSocketManager webSocket;
+        static string webSocketUri;
 
 
         public AstaServiceLocal()
@@ -26,6 +27,10 @@ namespace ASTAService
             InitializeComponent();
 
             log = new FileWatchLogger(@"d:\temp");
+            webSocketUri = "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
+            
+            webSocket = new WebSocketManager(webSocketUri);
+            webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(WebSocket_EvntInfoMessage);
 
             timer = new System.Timers.Timer(30000);//создаём объект таймера
             timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
@@ -64,6 +69,12 @@ namespace ASTAService
                 timer.Stop();
             }
             catch { }
+            try
+            {
+                webSocket.Close();
+                webSocket.EvntInfoMessage -= WebSocket_EvntInfoMessage;
+            }
+            catch { }
 
             try { log?.Stop(); } catch { }
             try { workerThread?.Abort(); } catch { }
@@ -77,11 +88,9 @@ namespace ASTAService
         private void DoWork()
         {
 
-            //form1.Show();
-            //System.Windows.Forms.Application.Run(form1);
-
             log.Start();
-            //   Task.Run(() => ClientLaunchAsync("ws://localhost:5000"));
+            //Task.Run(() => ClientLaunchAsync(webSocketUri));
+            //  ClientLaunchAsync(webSocketUri);
         }
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
@@ -89,31 +98,24 @@ namespace ASTAService
             timer.Enabled = false;
             timer.Stop();
             log.WriteString("Check working Elapsed");
+            
+            //Запускаем процедуру (чего хотим выполнить по таймеру).
+            webSocket.Send("{\"time\": 1}");
+            webSocket.Send("{\"ping\": 1}");
 
             //  Task.Run(()=>  ClientSendAsync( "Hello"));
 
-            // runProcedure(); //Запускаем процедуру (чего хотим выполнить по таймеру).
             timer.Enabled = true;
             timer.Start();
         }
 
-        static ClientWebSocket webSocket = null;
 
-        private static Task ClientLaunchAsync(string serverUri)
+        private void WebSocket_EvntInfoMessage(object sender, TextEventArgs e)
         {
-            // https://archive.codeplex.com/?p=websocket4net //server
-
-            webSocket = new ClientWebSocket();
-            return webSocket.ConnectAsync(new Uri(serverUri), CancellationToken.None);
+            log.WriteString(e.Message);
         }
 
-        private static Task ClientSendAsync(string text)
-        {
-            // Do something with WebSocket
 
-            var arraySegment = new ArraySegment<byte>(Encoding.UTF8.GetBytes(text));
-            return webSocket.SendAsync(arraySegment, WebSocketMessageType.Text, true, CancellationToken.None);
-        }
     }
 
 
@@ -297,18 +299,17 @@ namespace ASTAService
                 System.Windows.Forms.MessageBox.Show(ex.Message);
             }
         }
-
     }
 
 
     public class FileWatchLogger
     {
-        FileSystemWatcher watcher;
+        System.IO.FileSystemWatcher watcher;
         readonly object obj = new object();
         bool enabled = true;
         public FileWatchLogger(string pathToDir)
         {
-            watcher = new FileSystemWatcher(pathToDir);
+            watcher = new System.IO.FileSystemWatcher(pathToDir);
             watcher.IncludeSubdirectories = true;
             watcher.Deleted += Watcher_Deleted;
             watcher.Created += Watcher_Created;
@@ -331,24 +332,24 @@ namespace ASTAService
         }
         public void WriteString(string text)
         {
-            RecordEntry("WriteString", text, WatcherChangeTypes.Created);
+            RecordEntry("WriteString", text, System.IO.WatcherChangeTypes.Created);
         }
         // переименование файлов
-        private void Watcher_Renamed(object sender, RenamedEventArgs e)
+        private void Watcher_Renamed(object sender, System.IO.RenamedEventArgs e)
         {
             string fileEvent = "переименован в " + e.FullPath;
             string filePath = e.OldFullPath;
             RecordEntry(fileEvent, filePath, e.ChangeType);
         }
         // изменение файлов
-        private void Watcher_Changed(object sender, FileSystemEventArgs e)
+        private void Watcher_Changed(object sender, System.IO.FileSystemEventArgs e)
         {
             string fileEvent = "изменен";
             string filePath = e.FullPath;
             RecordEntry(fileEvent, filePath, e.ChangeType);
         }
         // создание файлов
-        private void Watcher_Created(object sender, FileSystemEventArgs e)
+        private void Watcher_Created(object sender, System.IO.FileSystemEventArgs e)
         {
             string fileEvent = "создан";
             string filePath = e.FullPath;
@@ -356,26 +357,92 @@ namespace ASTAService
             RecordEntry(fileEvent, filePath, e.ChangeType);
         }
         // удаление файлов
-        private void Watcher_Deleted(object sender, FileSystemEventArgs e)
+        private void Watcher_Deleted(object sender, System.IO.FileSystemEventArgs e)
         {
             string fileEvent = "удален";
             string filePath = e.FullPath;
             RecordEntry(fileEvent, filePath, e.ChangeType);
         }
 
-        private void RecordEntry(string fileEvent, string filePath, WatcherChangeTypes typo)
+        private void RecordEntry(string fileEvent, string filePath, System.IO.WatcherChangeTypes typo)
         {
             //
             string path = Assembly.GetExecutingAssembly().Location;
-            string pathToLog = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path) + ".log");
+            string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
             lock (obj)
             {
-                using (StreamWriter writer = new StreamWriter(pathToLog, true))//"D:\\templog.txt"
+                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))//"D:\\templog.txt"
                 {
                     writer.WriteLine($"{DateTime.Now.ToString("yyyy.MM.dd hh:mm:ss")}|{typo}|{filePath} был {fileEvent}");
                     writer.Flush();
                 }
             }
+        }
+    }
+
+
+
+    public class WebSocketManager
+    {
+        private AutoResetEvent messageReceiveEvent = new AutoResetEvent(false);
+        private string lastMessageReceived;
+        private WebSocket webSocket;
+        public delegate void InfoMessage(object sender, TextEventArgs e);
+        public event InfoMessage EvntInfoMessage;
+
+        public WebSocketManager(string webSocketUri)
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Initializing websocket. Uri: " + webSocketUri));
+
+            webSocket = new WebSocket(webSocketUri);
+            webSocket.Opened += new EventHandler(websocket_Opened);
+            webSocket.Closed += new EventHandler(websocket_Closed);
+            webSocket.Error += new EventHandler<SuperSocket.ClientEngine.ErrorEventArgs>(websocket_Error);
+            webSocket.MessageReceived += new EventHandler<MessageReceivedEventArgs>(websocket_MessageReceived);
+
+            webSocket.Open();
+            while (webSocket.State == WebSocketState.Connecting) { };   // by default webSocket4Net has AutoSendPing=true, 
+                                                                        // so we need to wait until connection established
+            if (webSocket.State != WebSocketState.Open)
+            {
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Connection is not opened."));
+                //  throw new Exception("Connection is not opened.");
+            }
+        }
+
+        public string Send(string data)
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Client wants to send data:" + data));
+
+            webSocket.Send(data);
+            if (!messageReceiveEvent.WaitOne(5000))                         // waiting for the response with 5 secs timeout
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Cannot receive the response. Timeout."));
+
+            return lastMessageReceived;
+        }
+
+        public void Close()
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Closing websocket..."));
+            webSocket.Close();
+        }
+        private void websocket_Opened(object sender, EventArgs e)
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Websocket is opened."));
+        }
+        private void websocket_Error(object sender, SuperSocket.ClientEngine.ErrorEventArgs e)
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs(e.Exception.Message));
+        }
+        private void websocket_Closed(object sender, EventArgs e)
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Websocket is closed."));
+        }
+        private void websocket_MessageReceived(object sender, MessageReceivedEventArgs e)
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Message received: " + e.Message));
+            lastMessageReceived = e.Message;
+            messageReceiveEvent.Set();
         }
     }
 
