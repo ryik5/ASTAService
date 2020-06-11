@@ -4,9 +4,11 @@ using System.Configuration.Install;
 using System.IO;
 using System.Net.WebSockets;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.ServiceProcess;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Timers;
 
 namespace ASTAService
@@ -15,7 +17,7 @@ namespace ASTAService
     {
         private System.Timers.Timer timer = null;
         private Thread workerThread = null;
-        FileWatchLogger log=null ;
+        FileWatchLogger log = null;
 
 
 
@@ -23,7 +25,7 @@ namespace ASTAService
         {
             InitializeComponent();
 
-            log = new FileWatchLogger(@"d:\temp"); 
+            log = new FileWatchLogger(@"d:\temp");
 
             timer = new System.Timers.Timer(30000);//создаём объект таймера
             timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
@@ -79,7 +81,7 @@ namespace ASTAService
             //System.Windows.Forms.Application.Run(form1);
 
             log.Start();
-            ClientLaunchAsync();
+            //   Task.Run(() => ClientLaunchAsync("ws://localhost:5000"));
         }
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
@@ -87,27 +89,31 @@ namespace ASTAService
             timer.Enabled = false;
             timer.Stop();
             log.WriteString("Check working Elapsed");
+
+            //  Task.Run(()=>  ClientSendAsync( "Hello"));
+
             // runProcedure(); //Запускаем процедуру (чего хотим выполнить по таймеру).
             timer.Enabled = true;
             timer.Start();
         }
 
+        static ClientWebSocket webSocket = null;
 
-        private static async void ClientLaunchAsync()
+        private static Task ClientLaunchAsync(string serverUri)
         {
-       // https://archive.codeplex.com/?p=websocket4net //server
+            // https://archive.codeplex.com/?p=websocket4net //server
 
-
-            ClientWebSocket webSocket = null;
             webSocket = new ClientWebSocket();
-            await webSocket.ConnectAsync(new Uri("ws://localhost:5000"), CancellationToken.None);
-
-            // Do something with WebSocket
-
-            var arraySegment = new ArraySegment<byte>(Encoding.UTF8.GetBytes("Hello"));
-            await webSocket.SendAsync(arraySegment, WebSocketMessageType.Text, true, CancellationToken.None);
+            return webSocket.ConnectAsync(new Uri(serverUri), CancellationToken.None);
         }
 
+        private static Task ClientSendAsync(string text)
+        {
+            // Do something with WebSocket
+
+            var arraySegment = new ArraySegment<byte>(Encoding.UTF8.GetBytes(text));
+            return webSocket.SendAsync(arraySegment, WebSocketMessageType.Text, true, CancellationToken.None);
+        }
     }
 
 
@@ -122,10 +128,14 @@ namespace ASTAService
         //https://stackoverflow.com/questions/12201365/programmatically-remove-a-service-using-c-sharp
 
         //  private static readonly ILog log = LogManager.GetLogger(typeof(Program));
-        private static readonly string exePath = Assembly.GetExecutingAssembly().Location;
-        ServiceInstaller serviceInstaller;
-        ServiceProcessInstaller processInstaller;
-        private static string serviceName = "AstaServiceLocal";
+        static ServiceInstaller serviceInstaller;
+        readonly ServiceProcessInstaller processInstaller;
+
+        public static readonly string serviceExePath = Assembly.GetExecutingAssembly().Location;
+        public static readonly string serviceName = "AstaServiceLocal";
+        public static readonly string serviceDisplayName = "ASTA Local Service";
+        public static readonly string serviceDescription = "ASTA (get and send data) as a Local Service";
+        private static int timeoutMilliseconds = 2000;
         public ServiceInstallerUtility()
         {
             //InitializeComponent();
@@ -135,18 +145,28 @@ namespace ASTAService
             serviceInstaller = new ServiceInstaller();
             serviceInstaller.StartType = ServiceStartMode.Automatic;
             serviceInstaller.ServiceName = serviceName;
-            serviceInstaller.DisplayName = "ASTA Local Service";
-            serviceInstaller.Description = "ASTA (get and send data) as a Local Service";
+            serviceInstaller.AfterInstall += new InstallEventHandler(ServiceInstaller_AfterInstall);
+            //           serviceInstaller.DelayedAutoStart = true;
+            serviceInstaller.DisplayName = serviceDisplayName;
+            serviceInstaller.Description = serviceDescription;
 
             Installers.Add(processInstaller);
             Installers.Add(serviceInstaller);
+        }
+
+        private void ServiceInstaller_AfterInstall(object sender, InstallEventArgs e)
+        {
+            using (ServiceController sc = new ServiceController(serviceInstaller.ServiceName))
+            {
+                sc.Start();
+            }
         }
 
         public static bool Install()
         {
             try
             {
-                ManagedInstallerClass.InstallHelper(new[] { "/i", exePath });
+                ManagedInstallerClass.InstallHelper(new[] { "/i", serviceExePath });
             }
             catch { return false; }
             return true;
@@ -156,13 +176,13 @@ namespace ASTAService
         {
             try
             {
-                ManagedInstallerClass.InstallHelper(new[] { "/u", exePath });
+                ManagedInstallerClass.InstallHelper(new[] { "/u", serviceExePath });
             }
             catch { return false; }
             return true;
         }
 
-        public static bool StopService(string serviceName, int timeoutMilliseconds)
+        public static bool StopService()
         {
             ServiceController service = new ServiceController(serviceName);
             try
@@ -179,6 +199,107 @@ namespace ASTAService
             }
         }
     }
+
+    public class WindowsServiceClass
+    {
+        #region SERVICE_ACCESS
+        [Flags]
+        public enum SERVICE_ACCESS : uint
+        {
+            STANDARD_RIGHTS_REQUIRED = 0xF0000,
+            SERVICE_QUERY_CONFIG = 0x00001,
+            SERVICE_CHANGE_CONFIG = 0x00002,
+            SERVICE_QUERY_STATUS = 0x00004,
+            SERVICE_ENUMERATE_DEPENDENTS = 0x00008,
+            SERVICE_START = 0x00010,
+            SERVICE_STOP = 0x00020,
+            SERVICE_PAUSE_CONTINUE = 0x00040,
+            SERVICE_INTERROGATE = 0x00080,
+            SERVICE_USER_DEFINED_CONTROL = 0x00100,
+            SERVICE_ALL_ACCESS = (STANDARD_RIGHTS_REQUIRED |
+                SERVICE_QUERY_CONFIG |
+                SERVICE_CHANGE_CONFIG |
+                SERVICE_QUERY_STATUS |
+                SERVICE_ENUMERATE_DEPENDENTS |
+                SERVICE_START |
+                SERVICE_STOP |
+                SERVICE_PAUSE_CONTINUE |
+                SERVICE_INTERROGATE |
+                SERVICE_USER_DEFINED_CONTROL)
+        }
+        #endregion
+        #region SCM_ACCESS
+        [Flags]
+        public enum SCM_ACCESS : uint
+        {
+            STANDARD_RIGHTS_REQUIRED = 0xF0000,
+            SC_MANAGER_CONNECT = 0x00001,
+            SC_MANAGER_CREATE_SERVICE = 0x00002,
+            SC_MANAGER_ENUMERATE_SERVICE = 0x00004,
+            SC_MANAGER_LOCK = 0x00008,
+            SC_MANAGER_QUERY_LOCK_STATUS = 0x00010,
+            SC_MANAGER_MODIFY_BOOT_CONFIG = 0x00020,
+            SC_MANAGER_ALL_ACCESS = STANDARD_RIGHTS_REQUIRED |
+                SC_MANAGER_CONNECT |
+                SC_MANAGER_CREATE_SERVICE |
+                SC_MANAGER_ENUMERATE_SERVICE |
+                SC_MANAGER_LOCK |
+                SC_MANAGER_QUERY_LOCK_STATUS |
+                SC_MANAGER_MODIFY_BOOT_CONFIG
+        }
+        #endregion
+
+        #region DeleteService
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool DeleteService(IntPtr hService);
+        #endregion
+        #region OpenService
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        static extern IntPtr OpenService(IntPtr hSCManager, string lpServiceName, SERVICE_ACCESS dwDesiredAccess);
+        #endregion
+        #region OpenSCManager
+        [DllImport("advapi32.dll", EntryPoint = "OpenSCManagerW", ExactSpelling = true, CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern IntPtr OpenSCManager(string machineName, string databaseName, SCM_ACCESS dwDesiredAccess);
+        #endregion
+        #region CloseServiceHandle
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool CloseServiceHandle(IntPtr hSCObject);
+        #endregion
+
+        public void Uninstall(string serviceName)
+        {
+            try
+            {
+                IntPtr schSCManager = OpenSCManager(null, null, SCM_ACCESS.SC_MANAGER_ALL_ACCESS);
+                if (schSCManager != IntPtr.Zero)
+                {
+                    IntPtr schService = OpenService(schSCManager, serviceName, SERVICE_ACCESS.SERVICE_ALL_ACCESS);
+                    if (schService != IntPtr.Zero)
+                    {
+                        if (DeleteService(schService) == false)
+                        {
+                            System.Windows.Forms.MessageBox.Show(
+                                string.Format("DeleteService failed {0}", Marshal.GetLastWin32Error()));
+                        }
+                    }
+                    CloseServiceHandle(schSCManager);
+                    // if you don't close this handle, Services control panel
+                    // shows the service as "disabled", and you'll get 1072 errors
+                    // trying to reuse this service's name
+                    CloseServiceHandle(schService);
+
+                }
+            }
+            catch (System.Exception ex)
+            {
+                System.Windows.Forms.MessageBox.Show(ex.Message);
+            }
+        }
+
+    }
+
 
     public class FileWatchLogger
     {
@@ -210,7 +331,7 @@ namespace ASTAService
         }
         public void WriteString(string text)
         {
-            RecordEntry("WriteString", text , WatcherChangeTypes.Created);
+            RecordEntry("WriteString", text, WatcherChangeTypes.Created);
         }
         // переименование файлов
         private void Watcher_Renamed(object sender, RenamedEventArgs e)
@@ -231,7 +352,7 @@ namespace ASTAService
         {
             string fileEvent = "создан";
             string filePath = e.FullPath;
-            
+
             RecordEntry(fileEvent, filePath, e.ChangeType);
         }
         // удаление файлов
@@ -246,7 +367,7 @@ namespace ASTAService
         {
             //
             string path = Assembly.GetExecutingAssembly().Location;
-            string pathToLog =Path.Combine( Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path)+".log");
+            string pathToLog = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path) + ".log");
             lock (obj)
             {
                 using (StreamWriter writer = new StreamWriter(pathToLog, true))//"D:\\templog.txt"
@@ -258,35 +379,4 @@ namespace ASTAService
         }
     }
 
-    /*      
-using System.Timers;
-namespace MyService
-{
-    {
-    public partial class MyService: ServiceBase
-    {
-    private System.Timers.Timer timer = null;
-
-    public MyService()
-    {
-        InitializeComponent();
-        timer = new System.Timers.Timer(30000);//создаём объект таймера
-        timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
-    }
-
-    void timer_Elapsed(object sender, ElapsedEventArgs e)
-    {
-        //собственно здесь пишем код таймера
-    }
-    protected override void OnStart(string[] args)
-    {
-        timer.Start();
-    }
-
-    protected override void OnStop()
-    {
-        timer.Stop();
-    }
-} 
-*/
 }

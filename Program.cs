@@ -25,11 +25,13 @@ namespace ASTAService
                 service
             };
 
+            string serviceName = ServiceInstallerUtility.serviceName; 
+
             if (Environment.UserInteractive)
             {
                 // Разбор пути для саморегистрации
                 if (args?.Length>0 && args[0].Length > 1
-                    && (args[0].StartsWith("-") || args[0].StartsWith("/") || args[0].StartsWith(" ")))
+                    && (args[0].StartsWith("-") || args[0].StartsWith("/")))
                 {
                     switch (args[0].Substring(1).ToLower())
                     {
@@ -47,21 +49,21 @@ namespace ASTAService
                             break;
                         case "uninstall":
                         case "u":
-                            ServiceInstallerUtility.StopService("ASTAService.exe", 2000);
-                            service.Stop();
-                            if (!ServiceInstallerUtility.Uninstall())
+                            ServiceInstallerUtility.StopService();
+                             
+                            uninstallService.Uninstall(serviceName);
+                           if (!ServiceInstallerUtility.Uninstall())
                             {
                                 //  MessageBox.Show("Failed to uninstall service");
                             }
                             else
                             {
-                                //"taskkill /f /IM astaservice.exe";
                                 //      MessageBox.Show("Service stopped. Goodbye.");
                             }
-                            break;
-                        case "Start":
-                        case "s":
-                            service.Start();
+
+                            string processName = System.IO.Path.GetFileName(ServiceInstallerUtility.serviceExePath);
+                            System.Diagnostics.Process.Start("taskkill", $"/F /IM {processName}");
+
                             break;
                         default:
                             service.Start();
@@ -79,9 +81,10 @@ namespace ASTAService
             }
             else
             {
-                service.Start();
                 ServiceBase.Run(ServicesToRun);
             }
         }
+
+       static WindowsServiceClass uninstallService = new WindowsServiceClass();
     }
 }

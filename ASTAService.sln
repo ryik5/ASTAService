@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.29519.181
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ASTAService", "ASTAService.csproj", "{85AE3B9D-1410-4AF1-80F2-08BFDF35A4A5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebSocketServer", "..\WebSocketServer\WebSocketServer.csproj", "{E4443AF3-B0AE-439E-8480-0C2598F5F584}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebSocketServer", "..\1\WebSocketServer\WebSocketServer.csproj", "{E4443AF3-B0AE-439E-8480-0C2598F5F584}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
