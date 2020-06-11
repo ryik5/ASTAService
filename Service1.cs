@@ -16,6 +16,7 @@ namespace ASTAService
     {
         private System.Timers.Timer timer = null;
         private Thread workerThread = null;
+        private Thread webThread = null;
         FileWatchLogger log = null;
 
         WebSocketManager webSocket;
@@ -32,20 +33,14 @@ namespace ASTAService
             webSocket = new WebSocketManager(webSocketUri);
             webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(WebSocket_EvntInfoMessage);
 
-            timer = new System.Timers.Timer(30000);//создаём объект таймера
+            timer = new System.Timers.Timer(10000);//создаём объект таймера
             timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
         }
 
 
         protected override void OnStart(string[] args)
         {
-            workerThread = new Thread(new ThreadStart(DoWork));
-            workerThread.SetApartmentState(ApartmentState.STA);
-            //or workerThread = new Thread(new ThreadStart(logger.Start));
-            workerThread.Start();
-            workerThread.IsBackground = true;
-            timer.Enabled = true;
-            timer.Start();
+            Start();
         }
 
         internal void Start()
@@ -58,7 +53,9 @@ namespace ASTAService
             }
 
             workerThread.Start();
-            log.Start();
+
+            timer.Enabled = true;
+            timer.Start();
         }
 
         protected override void OnStop()
@@ -87,10 +84,7 @@ namespace ASTAService
 
         private void DoWork()
         {
-
             log.Start();
-            //Task.Run(() => ClientLaunchAsync(webSocketUri));
-            //  ClientLaunchAsync(webSocketUri);
         }
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
@@ -108,14 +102,11 @@ namespace ASTAService
             timer.Enabled = true;
             timer.Start();
         }
-
-
+        
         private void WebSocket_EvntInfoMessage(object sender, TextEventArgs e)
         {
             log.WriteString(e.Message);
         }
-
-
     }
 
 
