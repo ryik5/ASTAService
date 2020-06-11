@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using WebSocket4Net;
+using Newtonsoft.Json;
 
 namespace ASTAService
 {
@@ -96,7 +97,7 @@ namespace ASTAService
 
         private void StartWebSocket()
         {
-            webSocketUri = "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
+            webSocketUri = "ws://localhost:5000";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
 
             webSocket = new WebSocketManager(webSocketUri);
             webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(WebSocket_EvntInfoMessage);
@@ -410,9 +411,7 @@ namespace ASTAService
 
     public class Logger
     {
-        System.IO.FileSystemWatcher watcher;
         readonly object obj = new object();
-        bool enabled = true;
 
         public Logger() { }
 
@@ -460,15 +459,19 @@ namespace ASTAService
             if (webSocket.State != WebSocketState.Open)
             {
                 EvntInfoMessage?.Invoke(this, new TextEventArgs("Connection is not opened."));
-                //  throw new Exception("Connection is not opened.");
             }
         }
 
         public string Send(string data)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Client wants to send data:" + data));
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("I want to send data:" + data));
 
-            webSocket.Send(data);
+           // var r = new Response { Type = ResponseType.Message, Data = new { Message = data } };
+            var r = new Response { Type = ResponseType.Message, Data = data  };
+
+            dynamic obj = JsonConvert.SerializeObject(r);
+            
+            webSocket.Send(obj);
             if (!messageReceiveEvent.WaitOne(5000))                         // waiting for the response with 5 secs timeout
                 EvntInfoMessage?.Invoke(this, new TextEventArgs("Cannot receive the response. Timeout."));
 
@@ -494,10 +497,62 @@ namespace ASTAService
         }
         private void websocket_MessageReceived(object sender, MessageReceivedEventArgs e)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Message received: " + e.Message));
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Raw data: " + e.Message));
+
+            var json = e.Message;
+
+            try
+            {
+                dynamic obj = JsonConvert.DeserializeObject(json);
+                switch ((int)obj.Type)
+                {
+                    case (int)CommandType.Register:
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Обработка не написана - Register" + +obj?.Data?.Message));
+                        break;
+                    case (int)CommandType.Message:
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Сообщение: " + obj?.Data?.Message));
+                        break;
+                    case (int)CommandType.NameChange:
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Обработка не написана - NameChange: " + obj?.Data?.Message));
+                        break;
+                }
+            }
+            catch(Exception err)
+            {
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Сообщение не распознал: " + err.Message));
+            }
+
             lastMessageReceived = e.Message;
             messageReceiveEvent.Set();
         }
-    }
 
+        /// <summary>
+        /// Defines the type of response to send back to the client for parsing logic
+        /// </summary>
+        public enum ResponseType
+        {
+            Connection = 0,
+            Disconnect = 1,
+            Message = 2,
+            NameChange = 3,
+            UserCount = 4,
+            Error = 255
+        }
+
+        /// <summary>
+        /// Defines the response object to send back to the client
+        /// </summary>
+        public class Response
+        {
+            public ResponseType Type { get; set; }
+            public dynamic Data { get; set; }
+        }
+
+        public enum CommandType
+        {
+            Register = 0,
+            Message,
+            NameChange
+        }
+    }
 }
