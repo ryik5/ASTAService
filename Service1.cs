@@ -4,9 +4,7 @@ using System.Configuration.Install;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.ServiceProcess;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Timers;
 using WebSocket4Net;
 using Newtonsoft.Json;
@@ -279,6 +277,9 @@ namespace ASTAService
         static extern bool CloseServiceHandle(IntPtr hSCObject);
         #endregion
 
+        public delegate void InfoMessage(object sender, TextEventArgs e);
+        public event InfoMessage EvntInfoMessage;
+
         public void Uninstall(string serviceName)
         {
             try
@@ -291,8 +292,10 @@ namespace ASTAService
                     {
                         if (DeleteService(schService) == false)
                         {
-                            System.Windows.Forms.MessageBox.Show(
-                                string.Format("DeleteService failed {0}", Marshal.GetLastWin32Error()));
+                            EvntInfoMessage?.Invoke(this, new TextEventArgs($"DeleteService failed {Marshal.GetLastWin32Error()}"));
+
+                            //System.Windows.Forms.MessageBox.Show(
+                            //    string.Format("DeleteService failed {0}", Marshal.GetLastWin32Error()));
                         }
                     }
                     CloseServiceHandle(schSCManager);
@@ -305,7 +308,8 @@ namespace ASTAService
             }
             catch (System.Exception ex)
             {
-                System.Windows.Forms.MessageBox.Show(ex.Message);
+                EvntInfoMessage?.Invoke(this, new TextEventArgs(ex.Message));
+                //System.Windows.Forms.MessageBox.Show(ex.Message);
             }
         }
     }
@@ -407,7 +411,7 @@ namespace ASTAService
             }
         }
     }
-
+    
 
     public class Logger
     {

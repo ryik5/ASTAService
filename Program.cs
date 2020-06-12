@@ -5,13 +5,20 @@ namespace ASTAService
 {
     static class Program
     {
+        static AstaServiceLocal service = null;
+        static WindowsServiceClass uninstallService = null;
+
         /// <summary>
         /// The main entry point for the application
         /// </summary>
         /// <param name="args"> Parameters for install: ASTAService.exe -i, uninstall: ASTAService.exe -u </param>
         static void Main(string[] args)
         {
-            var service = new AstaServiceLocal();
+            uninstallService = new WindowsServiceClass();
+            uninstallService.EvntInfoMessage += UninstallService_EvntInfoMessage;
+
+            service = new AstaServiceLocal();
+
             if (args?.Length > 0)
             {
                 foreach (var str in args)
@@ -25,12 +32,12 @@ namespace ASTAService
                 service
             };
 
-            string serviceName = ServiceInstallerUtility.serviceName; 
+            string serviceName = ServiceInstallerUtility.serviceName;
 
             if (Environment.UserInteractive)
             {
                 // Разбор пути для саморегистрации
-                if (args?.Length>0 && args[0].Length > 1
+                if (args?.Length > 0 && args[0].Length > 1
                     && (args[0].StartsWith("-") || args[0].StartsWith("/")))
                 {
                     switch (args[0].Substring(1).ToLower())
@@ -50,9 +57,9 @@ namespace ASTAService
                         case "uninstall":
                         case "u":
                             ServiceInstallerUtility.StopService();
-                             
+
                             uninstallService.Uninstall(serviceName);
-                           if (!ServiceInstallerUtility.Uninstall())
+                            if (!ServiceInstallerUtility.Uninstall())
                             {
                                 //  MessageBox.Show("Failed to uninstall service");
                             }
@@ -85,6 +92,10 @@ namespace ASTAService
             }
         }
 
-       static WindowsServiceClass uninstallService = new WindowsServiceClass();
+        private static void UninstallService_EvntInfoMessage(object sender, TextEventArgs e)
+        {
+            service.WriteString(e.Message);
+        }
+
     }
 }
