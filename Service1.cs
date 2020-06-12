@@ -466,8 +466,7 @@ namespace ASTAService
         {
             EvntInfoMessage?.Invoke(this, new TextEventArgs("I want to send data:" + data));
 
-           // var r = new Response { Type = ResponseType.Message, Data = new { Message = data } };
-            var r = new Response { Type = ResponseType.Message, Data = data  };
+            var r = new Response { Type = ResponseType.Message, Data = data   };
 
             dynamic obj = JsonConvert.SerializeObject(r);
             
@@ -497,29 +496,29 @@ namespace ASTAService
         }
         private void websocket_MessageReceived(object sender, MessageReceivedEventArgs e)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Raw data: " + e.Message));
-
-            var json = e.Message;
+            EvntInfoMessage?.Invoke(this, new TextEventArgs($"Получены \"сырые\" данные: {e.Message}"));
 
             try
             {
-                dynamic obj = JsonConvert.DeserializeObject(json);
+                dynamic obj = JsonConvert.DeserializeObject(e.Message);
+                EvntInfoMessage?.Invoke(this, new TextEventArgs($"Десериализованные данные: {obj}"));
+ 
                 switch ((int)obj.Type)
                 {
                     case (int)CommandType.Register:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Обработка не написана - Register" + +obj?.Data?.Message));
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Обработка не написана - Register" + +obj?.Data?.Value));
                         break;
                     case (int)CommandType.Message:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Сообщение: " + obj?.Data?.Message));
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Получено сообщение: " + obj?.Data?.Value));
                         break;
                     case (int)CommandType.NameChange:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Обработка не написана - NameChange: " + obj?.Data?.Message));
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Обработка не написана - NameChange: " + obj?.Data?.Value));
                         break;
                 }
             }
             catch(Exception err)
             {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Сообщение не распознал: " + err.Message));
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Полученные данные не распознаны: " + err.Message));
             }
 
             lastMessageReceived = e.Message;
@@ -551,8 +550,8 @@ namespace ASTAService
         public enum CommandType
         {
             Register = 0,
-            Message,
-            NameChange
+            NameChange,
+            Message
         }
     }
 }
