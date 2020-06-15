@@ -8,13 +8,14 @@ using System.Threading;
 using System.Timers;
 using WebSocket4Net;
 using Newtonsoft.Json;
+using System.Threading.Tasks;
 
 namespace ASTAService
 {
     public partial class AstaServiceLocal : ServiceBase
     {
         private System.Timers.Timer timer = null;
-        private Thread workerThread = null;
+        private Thread dirWatcherThread = null;
         private Thread webThread = null;
         DirectoryWatchLogger direcoryWatcherlog = null;
         Logger log = null;
@@ -37,27 +38,53 @@ namespace ASTAService
 
         internal void Start()
         {
-            if (workerThread == null)
-            {
-                workerThread = new Thread(new ThreadStart(StartLog));
-                workerThread.SetApartmentState(ApartmentState.STA); //ApartmentState.STA - поток надолго НЕ ЗАНИМАТЬ!
-                workerThread.IsBackground = true;
-            }
+            RunDirWatcher();
 
-            if (webThread == null)
-            {
-                webThread = new Thread(new ThreadStart(StartWebSocket));
-                webThread.SetApartmentState(ApartmentState.STA);
-                webThread.IsBackground = true;
-            }
-
-            workerThread.Start();
-            webThread.Start();
-
+            RunWebsocketClient();
+            
             timer = new System.Timers.Timer(10000);//создаём объект таймера
             timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
             timer.Enabled = true;
             timer.Start();
+        }
+
+        private void InitDirWatcher()
+        {
+            direcoryWatcherlog = new DirectoryWatchLogger();
+            direcoryWatcherlog.SetDirWatcher(@"d:\temp");
+
+            direcoryWatcherlog.StartWatcher();
+        }
+        private void RunDirWatcher()
+        {
+                dirWatcherThread = new Thread(new ThreadStart(InitDirWatcher));
+                dirWatcherThread.SetApartmentState(ApartmentState.STA); //ApartmentState.STA - поток надолго НЕ ЗАНИМАТЬ!
+                dirWatcherThread.IsBackground = true;
+
+            dirWatcherThread.Start();
+        }
+        private void StopDirWatcher()
+        {
+            try { direcoryWatcherlog?.StopWatcher(); } catch { }
+            try { dirWatcherThread?.Abort(); } catch { }
+        }
+        private void RunWebsocketClient()
+        {
+                            webThread = new Thread(new ThreadStart(StartWebSocket));
+                webThread.SetApartmentState(ApartmentState.STA);
+                webThread.IsBackground = true;
+            
+            webThread.Start();
+        }
+        private void StopWebsocketClient()
+        {
+            try
+            {
+                webSocket?.Close();
+                webSocket.EvntInfoMessage -= WebSocket_EvntInfoMessage;
+                webSocket = null;
+            }
+            catch { }
         }
 
         protected override void OnStop()
@@ -68,15 +95,9 @@ namespace ASTAService
                 timer.Stop();
             }
             catch { }
-            try
-            {
-                webSocket.Close();
-                webSocket.EvntInfoMessage -= WebSocket_EvntInfoMessage;
-            }
-            catch { }
 
-            try { direcoryWatcherlog?.StopWatcher(); } catch { }
-            try { workerThread?.Abort(); } catch { }
+            StopWebsocketClient();
+            StopDirWatcher();
         }
 
         public void WriteString(string text)
@@ -84,15 +105,7 @@ namespace ASTAService
             if(log != null)
                 log.WriteString(text);
         }
-
-        private void StartLog()
-        {
-            direcoryWatcherlog = new DirectoryWatchLogger();
-            direcoryWatcherlog.SetDirWatcher(@"d:\temp");
-
-            direcoryWatcherlog.StartWatcher();
-        }
-
+                
         private void StartWebSocket()
         {
             webSocketUri = "ws://localhost:5000";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
@@ -103,15 +116,28 @@ namespace ASTAService
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
         {
+            WriteString("Таймер работает...");
             timer.Enabled = false;
             timer.Stop();
-            log.WriteString("Check working Elapsed");
-            
-            //Запускаем процедуру (чего хотим выполнить по таймеру).
-            webSocket.Send("{\"time\": 1}"); //test webSocketServer
-            webSocket.Send("{\"ping\": 1}");
 
-            //  Task.Run(()=>  ClientSendAsync( "Hello"));
+            //Запускаем процедуру (чего хотим выполнить по таймеру).
+            if (webSocket != null )
+            {
+                if (webSocket.Connected)
+                {
+                    webSocket.Send("{\"time\": 1}"); //test webSocketServer
+                    webSocket.Send("{\"ping\": 1}"); //test webSocketServer
+                }
+                else
+                {
+                    Task.Run(() => StopWebsocketClient());
+                }
+            }
+            else
+            {
+                WriteString("К серверу не подключен.");
+                Task.Run(() => RunWebsocketClient());
+            }
 
             timer.Enabled = true;
             timer.Start();
@@ -119,7 +145,7 @@ namespace ASTAService
         
         private void WebSocket_EvntInfoMessage(object sender, TextEventArgs e)
         {
-            log.WriteString(e.Message);
+            WriteString(e.Message);
         }
     }
 
@@ -141,8 +167,8 @@ namespace ASTAService
 
         public static readonly string serviceExePath = Assembly.GetExecutingAssembly().Location;
         public static readonly string serviceName = "AstaServiceLocal";
-        public static readonly string serviceDisplayName = "ASTA Local Service";
-        public static readonly string serviceDescription = "ASTA (get and send data) as a Local Service";
+        public static readonly string serviceDisplayName = "ASTA Web Client";
+        public static readonly string serviceDescription = "ASTA websocket client as a collected events windows service";
         private static int timeoutMilliseconds = 2000;
         public ServiceInstallerUtility()
         {
@@ -446,7 +472,7 @@ namespace ASTAService
         private WebSocket webSocket;
         public delegate void InfoMessage(object sender, TextEventArgs e);
         public event InfoMessage EvntInfoMessage;
-
+        public bool Connected { get { return webSocket.State == WebSocketState.Open; } }
         public WebSocketManager(string webSocketUri)
         {
             EvntInfoMessage?.Invoke(this, new TextEventArgs("Initializing websocket. Uri: " + webSocketUri));
