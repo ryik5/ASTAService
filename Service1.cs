@@ -9,6 +9,7 @@ using System.Timers;
 using WebSocket4Net;
 using Newtonsoft.Json;
 using System.Threading.Tasks;
+using SuperSocket.ClientEngine;
 
 namespace ASTAService
 {
@@ -516,7 +517,7 @@ namespace ASTAService
         {
             EvntInfoMessage?.Invoke(this, new TextEventArgs("Websocket is opened."));
         }
-        private void websocket_Error(object sender, SuperSocket.ClientEngine.ErrorEventArgs e)
+        private void websocket_Error(object sender,ErrorEventArgs e)
         {
             EvntInfoMessage?.Invoke(this, new TextEventArgs(e.Exception.Message));
         }
@@ -584,6 +585,4 @@ namespace ASTAService
             Message
         }
     }
-
-
 }

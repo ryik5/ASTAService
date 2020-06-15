@@ -96,6 +96,5 @@ namespace ASTAService
         {
             service.WriteString(e.Message);
         }
-
     }
 }
