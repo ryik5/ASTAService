@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Timers;
 using Alchemy;
 using Alchemy.Classes;
+using Newtonsoft.Json;
 
 namespace ASTAService
 {
@@ -116,11 +117,46 @@ namespace ASTAService
               //  Origin = "localhost",
                 OnReceive = OnClientReceive
             };
+            ConnectToServer();
         }
-
+        private void ConnectToServer()
+        {
+            if (client!=null&&!client.Connected)
+            { client.Connect(); }
+        }
         private void OnClientReceive(UserContext context)
         {
-            WriteString("DataFrame: " + context.DataFrame.ToString());
+            var json = context.DataFrame.ToString();
+            WriteString($"От: \"{context.ClientAddress}\" получены \"сырые\" данные: {json}");
+
+            Response r = null;
+            dynamic obj = null;
+            try
+            {
+                // <3 dynamics
+                obj = JsonConvert.DeserializeObject(json);
+
+                WriteString($"Десериализованные данные: {obj}");
+            }
+            catch (Exception e) // Bad JSON! For shame.
+            {
+                r = new Response { Type = ResponseType.Message, Data = $" Сейчас {DateTime.Now.ToString("yyyy-MM-dd hh:MM:ss")} и ты спросил {json}{Environment.NewLine} это ошибка: {e.Message}" };
+            }
+
+            if (obj != null)
+            {
+                switch ((int)obj.Type)
+                {
+
+                    case (int)CommandType.Message:
+                        r = new Response { Type = ResponseType.Message, Data = $"Вы отправили {obj?.Data}" };
+                        WriteString($"Получено сообщение: {obj?.Data?.Value}");
+                        //try { ChatMessage(obj.Data.Value, context); }
+                        //catch (Exception err) { WriteString($"Ошибка ChatMessage: {err.Message}"); }
+                        break;
+                }
+            }
+            //context.Send(JsonConvert.SerializeObject(r));
         }
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
@@ -137,14 +173,13 @@ namespace ASTAService
             //Запускаем процедуру (чего хотим выполнить по таймеру).
             if (client != null)
             {
-                client.Connect();
                 if (client.Connected)
                 {
                     client.Send(text); //test webSocketServer
                 }
                 else
                 {
-                    Task.Run(() => StopWebsocketClient());
+                    Task.Run(() => ConnectToServer());
                 }
             }
             else
@@ -155,6 +190,47 @@ namespace ASTAService
 
             timer.Enabled = true;
             timer.Start();
+        }
+
+        /// <summary>
+        /// Defines the type of response to send back to the client for parsing logic
+        /// </summary>
+        public enum ResponseType
+        {
+            Connection = 0,
+            Disconnect = 1,
+            Message = 2,
+            NameChange = 3,
+            UserCount = 4,
+            Error = 255
+        }
+
+        /// <summary>
+        /// Defines the response object to send back to the client
+        /// </summary>
+        public class Response
+        {
+            public ResponseType Type { get; set; }
+            public dynamic Data { get; set; }
+        }
+
+        /// <summary>
+        /// Holds the name and context instance for an online user
+        /// </summary>
+        public class User
+        {
+            public string Name = String.Empty;
+            public UserContext Context { get; set; }
+        }
+
+        /// <summary>
+        /// Defines a type of command that the client sends to the server
+        /// </summary>
+        public enum CommandType
+        {
+            Register = 0,
+            NameChange,
+            Message
         }
     }
 
@@ -438,11 +514,15 @@ namespace ASTAService
 
                 EvntInfoMessage?.Invoke(this, new TextEventArgs(message));
 
-                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))
+                try
                 {
-                    writer.WriteLine(message);
-                    writer.Flush();
+                    using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))
+                    {
+                        writer.WriteLine(message);
+                        writer.Flush();
+                    }
                 }
+                catch(Exception err) { EvntInfoMessage?.Invoke(this, new TextEventArgs($"Ошибка записи '{err.Message}' лога в файл '{pathToLog}'")); }
             }
         }
     }
@@ -463,11 +543,14 @@ namespace ASTAService
             string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
             lock (obj)
             {
-                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))
+                try
                 {
-                    writer.WriteLine($"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{eventText}|{text}");
-                    writer.Flush();
-                }
+                    using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))
+                    {
+                        writer.WriteLine($"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{eventText}|{text}");
+                        writer.Flush();
+                    }
+                }catch { }
             }
         }
     }
