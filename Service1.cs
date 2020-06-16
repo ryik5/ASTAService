@@ -5,11 +5,10 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.ServiceProcess;
 using System.Threading;
-using System.Timers;
-using WebSocket4Net;
-using Newtonsoft.Json;
 using System.Threading.Tasks;
-using SuperSocket.ClientEngine;
+using System.Timers;
+using Alchemy;
+using Alchemy.Classes;
 
 namespace ASTAService
 {
@@ -21,8 +20,9 @@ namespace ASTAService
         DirectoryWatchLogger direcoryWatcherlog = null;
         static readonly Logger log = new Logger();
 
-        WebSocketManager webSocket;
-        static readonly string webSocketUri = "ws://localhost:5000";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
+        WebSocketClient client;
+
+        static readonly string webSocketUri = "ws://10.0.102.54:5000/path";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
 
         public AstaServiceLocal()
         {
@@ -66,13 +66,7 @@ namespace ASTAService
 
         private void WebSocketSend_EvntInfoMessage(object sender, TextEventArgs e)
         {
-            if (webSocket != null)
-            {
-                if (webSocket.Connected)
-                {
-                    webSocket.Send(e.Message); //test webSocketServer
-                }
-            }
+            SendMessage(e.Message);
         }
 
         private void StopDirWatcher()
@@ -92,13 +86,11 @@ namespace ASTAService
         {
             try
             {
-                webSocket?.Close();
-                webSocket.EvntInfoMessage -= WebSocket_EvntInfoMessage;
-                webSocket = null;
+                client.Disconnect();
+                client = null;
             }
             catch { }
         }
-
         protected override void OnStop()
         {
             try
@@ -111,7 +103,6 @@ namespace ASTAService
             StopWebsocketClient();
             StopDirWatcher();
         }
-
         public void WriteString(string text)
         {
             if (log != null)
@@ -120,22 +111,36 @@ namespace ASTAService
 
         private void StartWebSocket()
         {
-            webSocket = new WebSocketManager(webSocketUri);
-            webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(WebSocket_EvntInfoMessage);
+            client = new WebSocketClient(webSocketUri)
+            {
+              //  Origin = "localhost",
+                OnReceive = OnClientReceive
+            };
+        }
+
+        private void OnClientReceive(UserContext context)
+        {
+            WriteString("DataFrame: " + context.DataFrame.ToString());
         }
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
+        {
+            SendMessage("Ping");            
+        }
+
+        private void SendMessage(string text)
         {
             WriteString($"Служба '{nameof(AstaServiceLocal)}' активная...");
             timer.Enabled = false;
             timer.Stop();
 
             //Запускаем процедуру (чего хотим выполнить по таймеру).
-            if (webSocket != null)
+            if (client != null)
             {
-                if (webSocket.Connected)
+                client.Connect();
+                if (client.Connected)
                 {
-                    webSocket.Send("Ping"); //test webSocketServer
+                    client.Send(text); //test webSocketServer
                 }
                 else
                 {
@@ -150,11 +155,6 @@ namespace ASTAService
 
             timer.Enabled = true;
             timer.Start();
-        }
-
-        private void WebSocket_EvntInfoMessage(object sender, TextEventArgs e)
-        {
-            WriteString(e.Message);
         }
     }
 
@@ -175,23 +175,27 @@ namespace ASTAService
         readonly ServiceProcessInstaller processInstaller;
 
         public static readonly string serviceExePath = Assembly.GetExecutingAssembly().Location;
-        public static readonly string serviceName = "AstaServiceLocal";
+        public static readonly string serviceName = "ASTAWebClient";
         public static readonly string serviceDisplayName = "ASTA Web Client";
-        public static readonly string serviceDescription = "ASTA websocket client as a collected events windows service";
+        public static readonly string serviceDescription = "ASTA websocket client monitoring windows service";
         private static int timeoutMilliseconds = 2000;
         public ServiceInstallerUtility()
         {
             //InitializeComponent();
-            processInstaller = new ServiceProcessInstaller();
-            processInstaller.Account = ServiceAccount.LocalSystem;
+            processInstaller = new ServiceProcessInstaller
+            {
+                Account = ServiceAccount.LocalSystem
+            };
 
-            serviceInstaller = new ServiceInstaller();
-            serviceInstaller.StartType = ServiceStartMode.Automatic;
-            serviceInstaller.ServiceName = serviceName;
+            serviceInstaller = new ServiceInstaller
+            {
+                StartType = ServiceStartMode.Automatic,
+                //DelayedAutoStart = true,
+                ServiceName = serviceName,
+                DisplayName = serviceDisplayName,
+                Description = serviceDescription
+            };
             serviceInstaller.AfterInstall += new InstallEventHandler(ServiceInstaller_AfterInstall);
-            //           serviceInstaller.DelayedAutoStart = true;
-            serviceInstaller.DisplayName = serviceDisplayName;
-            serviceInstaller.Description = serviceDescription;
 
             Installers.Add(processInstaller);
             Installers.Add(serviceInstaller);
@@ -199,9 +203,15 @@ namespace ASTAService
 
         private void ServiceInstaller_AfterInstall(object sender, InstallEventArgs e)
         {
-            using (ServiceController sc = new ServiceController(serviceInstaller.ServiceName))
+            try
             {
-                sc.Start();
+                using (ServiceController sc = new ServiceController(serviceInstaller.ServiceName))
+                {
+                    sc.Start();
+                }
+            }catch(Exception err)
+            {
+
             }
         }
 
@@ -242,8 +252,7 @@ namespace ASTAService
             }
         }
     }
-
-
+    
     public class WindowsServiceClass
     {
         #region SERVICE_ACCESS
@@ -348,8 +357,7 @@ namespace ASTAService
             }
         }
     }
-
-
+    
     public class DirectoryWatchLogger
     {
         System.IO.FileSystemWatcher watcher;
@@ -438,8 +446,7 @@ namespace ASTAService
             }
         }
     }
-
-
+    
     public class Logger
     {
         readonly object obj = new object();
@@ -462,127 +469,6 @@ namespace ASTAService
                     writer.Flush();
                 }
             }
-        }
-    }
-
-
-    public class WebSocketManager
-    {
-        private AutoResetEvent messageReceiveEvent = new AutoResetEvent(false);
-        private string lastMessageReceived;
-        private WebSocket webSocket;
-        public delegate void InfoMessage(object sender, TextEventArgs e);
-        public event InfoMessage EvntInfoMessage;
-        public bool Connected { get { return webSocket.State == WebSocketState.Open; } }
-        public WebSocketManager(string webSocketUri)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Initializing websocket. Uri: " + webSocketUri));
-
-            webSocket = new WebSocket(webSocketUri);
-            webSocket.Opened += new EventHandler(websocket_Opened);
-            webSocket.Closed += new EventHandler(websocket_Closed);
-            webSocket.Error += new EventHandler<SuperSocket.ClientEngine.ErrorEventArgs>(websocket_Error);
-            webSocket.MessageReceived += new EventHandler<MessageReceivedEventArgs>(websocket_MessageReceived);
-
-            webSocket.Open();
-            while (webSocket.State == WebSocketState.Connecting) { };   // by default webSocket4Net has AutoSendPing=true, 
-                                                                        // so we need to wait until connection established
-            if (webSocket.State != WebSocketState.Open)
-            {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Connection is not opened."));
-            }
-        }
-
-        public string Send(string data)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("I want to send data:" + data));
-
-            var r = new Response { Type = ResponseType.Message, Data = data };
-
-            dynamic obj = JsonConvert.SerializeObject(r);
-
-            webSocket.Send(obj);
-            if (!messageReceiveEvent.WaitOne(5000))                         // waiting for the response with 5 secs timeout
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Cannot receive the response. Timeout."));
-
-            return lastMessageReceived;
-        }
-
-        public void Close()
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Closing websocket..."));
-            webSocket.Close();
-        }
-        private void websocket_Opened(object sender, EventArgs e)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Websocket is opened."));
-        }
-        private void websocket_Error(object sender,ErrorEventArgs e)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs(e.Exception.Message));
-        }
-        private void websocket_Closed(object sender, EventArgs e)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Websocket is closed."));
-        }
-        private void websocket_MessageReceived(object sender, MessageReceivedEventArgs e)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs($"Получены \"сырые\" данные: {e.Message}"));
-
-            try
-            {
-                dynamic obj = JsonConvert.DeserializeObject(e.Message);
-                EvntInfoMessage?.Invoke(this, new TextEventArgs($"Десериализованные данные: {obj}"));
-
-                switch ((int)obj.Type)
-                {
-                    case (int)CommandType.Register:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Обработка не написана - Register" + +obj?.Data?.Value));
-                        break;
-                    case (int)CommandType.Message:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Получено сообщение: " + obj?.Data?.Value));
-                        break;
-                    case (int)CommandType.NameChange:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Обработка не написана - NameChange: " + obj?.Data?.Value));
-                        break;
-                }
-            }
-            catch (Exception err)
-            {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Полученные данные не распознаны: " + err.Message));
-            }
-
-            lastMessageReceived = e.Message;
-            messageReceiveEvent.Set();
-        }
-
-        /// <summary>
-        /// Defines the type of response to send back to the client for parsing logic
-        /// </summary>
-        public enum ResponseType
-        {
-            Connection = 0,
-            Disconnect = 1,
-            Message = 2,
-            NameChange = 3,
-            UserCount = 4,
-            Error = 255
-        }
-
-        /// <summary>
-        /// Defines the response object to send back to the client
-        /// </summary>
-        public class Response
-        {
-            public ResponseType Type { get; set; }
-            public dynamic Data { get; set; }
-        }
-
-        public enum CommandType
-        {
-            Register = 0,
-            NameChange,
-            Message
         }
     }
 }

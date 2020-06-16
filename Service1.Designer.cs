@@ -29,7 +29,7 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
-            this.ServiceName = "AstaServiceLocal";
+            this.ServiceName = "ASTAWebClient";
             this.CanStop = true;
             this.CanPauseAndContinue = true;
             this.AutoLog = true;
