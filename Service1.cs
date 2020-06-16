@@ -19,15 +19,16 @@ namespace ASTAService
         private Thread dirWatcherThread = null;
         private Thread webThread = null;
         DirectoryWatchLogger direcoryWatcherlog = null;
-        static readonly Logger log = new Logger();
+        static Logger log = null;
 
+        static readonly string webserverSocketUri = "ws://10.0.102.54:5000/path";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
         WebSocketClient client;
 
-        static readonly string webSocketUri = "ws://10.0.102.54:5000/path";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
 
         public AstaServiceLocal()
         {
             InitializeComponent();
+            log = new Logger();
         }
 
 
@@ -77,7 +78,7 @@ namespace ASTAService
         }
         private void RunWebsocketClient()
         {
-            webThread = new Thread(new ThreadStart(StartWebSocket));
+            webThread = new Thread(new ThreadStart(InitWebSocketConnection));
             webThread.SetApartmentState(ApartmentState.STA);
             webThread.IsBackground = true;
 
@@ -110,11 +111,10 @@ namespace ASTAService
                 log.WriteString(text);
         }
 
-        private void StartWebSocket()
+        private void InitWebSocketConnection()
         {
-            client = new WebSocketClient(webSocketUri)
+            client = new WebSocketClient(webserverSocketUri)
             {
-              //  Origin = "localhost",
                 OnReceive = OnClientReceive
             };
             ConnectToServer();
