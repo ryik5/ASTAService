@@ -43,7 +43,7 @@ namespace ASTAService
 
             RunWebsocketClient();
 
-            timer = new System.Timers.Timer(10000);//создаём объект таймера
+            timer = new System.Timers.Timer(6add0000);//создаём объект таймера
             timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
             timer.Enabled = true;
             timer.Start();
@@ -149,14 +149,23 @@ namespace ASTAService
                 {
 
                     case (int)CommandType.Message:
-                        r = new Response { Type = ResponseType.Message, Data = $"Вы отправили {obj?.Data}" };
+                        string gotMessage = obj?.Data?.Value;
+                        if (gotMessage.Equals("SendCollectedData"))
+                        {
+                            r = new Response { Type = ResponseType.Message, Data = $"Ищу папку с информацией..." };
+                        }
+                        else
+                        {
+                            r = new Response { Type = ResponseType.Message, Data = $"Вы отправили {obj?.Data}" };
+                        }
+                        
                         WriteString($"Получено сообщение: {obj?.Data?.Value}");
                         //try { ChatMessage(obj.Data.Value, context); }
                         //catch (Exception err) { WriteString($"Ошибка ChatMessage: {err.Message}"); }
                         break;
                 }
             }
-            //context.Send(JsonConvert.SerializeObject(r));
+            context.Send(JsonConvert.SerializeObject(r));
         }
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
