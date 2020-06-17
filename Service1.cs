@@ -121,7 +121,7 @@ namespace ASTAService
         }
         private void ConnectToServer()
         {
-            if (client!=null&&!client.Connected)
+            if (client != null && !client.Connected)
             { client.Connect(); }
         }
         private void OnClientReceive(UserContext context)
@@ -158,7 +158,7 @@ namespace ASTAService
                         {
                             r = new Response { Type = ResponseType.Message, Data = $"Вы отправили {obj?.Data}" };
                         }
-                        
+
                         WriteString($"Получено сообщение: {obj?.Data?.Value}");
                         //try { ChatMessage(obj.Data.Value, context); }
                         //catch (Exception err) { WriteString($"Ошибка ChatMessage: {err.Message}"); }
@@ -170,7 +170,7 @@ namespace ASTAService
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
         {
-            SendMessage("Ping");            
+            SendMessage("Ping");
         }
 
         private void SendMessage(string text)
@@ -294,7 +294,8 @@ namespace ASTAService
                 {
                     sc.Start();
                 }
-            }catch(Exception err)
+            }
+            catch (Exception err)
             {
 
             }
@@ -337,7 +338,7 @@ namespace ASTAService
             }
         }
     }
-    
+
     public class WindowsServiceClass
     {
         #region SERVICE_ACCESS
@@ -442,7 +443,7 @@ namespace ASTAService
             }
         }
     }
-    
+
     public class DirectoryWatchLogger
     {
         System.IO.FileSystemWatcher watcher;
@@ -531,11 +532,11 @@ namespace ASTAService
                         writer.Flush();
                     }
                 }
-                catch(Exception err) { EvntInfoMessage?.Invoke(this, new TextEventArgs($"Ошибка записи '{err.Message}' лога в файл '{pathToLog}'")); }
+                catch (Exception err) { EvntInfoMessage?.Invoke(this, new TextEventArgs($"Ошибка записи '{err.Message}' лога в файл '{pathToLog}'")); }
             }
         }
     }
-    
+
     public class Logger
     {
         readonly object obj = new object();
@@ -559,7 +560,8 @@ namespace ASTAService
                         writer.WriteLine($"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{eventText}|{text}");
                         writer.Flush();
                     }
-                }catch { }
+                }
+                catch { }
             }
         }
     }
