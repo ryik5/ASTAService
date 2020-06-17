@@ -43,7 +43,7 @@ namespace ASTAService
 
             RunWebsocketClient();
 
-            timer = new System.Timers.Timer(6add0000);//создаём объект таймера
+            timer = new System.Timers.Timer(30000);//создаём объект таймера
             timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
             timer.Enabled = true;
             timer.Start();
