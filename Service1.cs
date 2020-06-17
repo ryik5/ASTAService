@@ -295,10 +295,7 @@ namespace ASTAService
                     sc.Start();
                 }
             }
-            catch (Exception err)
-            {
-
-            }
+            catch { }
         }
 
         public static bool Install()
