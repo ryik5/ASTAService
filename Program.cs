@@ -1,4 +1,7 @@
 ﻿using System;
+using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.ServiceProcess;
 
 namespace ASTAService
@@ -14,9 +17,12 @@ namespace ASTAService
         /// <param name="args"> Parameters for install: ASTAService.exe -i, uninstall: ASTAService.exe -u </param>
         static void Main(string[] args)
         {
+            //AppDomain.CurrentDomain.AssemblyResolve += ResolveAssembly;
+            AssemblyLoader.RegisterAssemblyLoader();
+
             uninstallService = new WindowsServiceClass();
             uninstallService.EvntInfoMessage += UninstallService_EvntInfoMessage;
-
+            
             service = new AstaServiceLocal();
 
             if (args?.Length > 0)
@@ -89,6 +95,25 @@ namespace ASTAService
             else
             {
                 ServiceBase.Run(ServicesToRun);
+            }
+        }
+
+        private static Assembly ResolveAssembly(object sender, ResolveEventArgs args)
+        {
+            //Получаем текущую сборку которая выполняется(чтобы из нее брать ресурсы)
+            Assembly thisAssembly = Assembly.GetExecutingAssembly();
+            //Формируем имя ресурса
+            var name = args.Name.Substring(0, args.Name.IndexOf(',')) + ".dll";
+            //Находим ресурс по имени
+            var resourceName = thisAssembly.GetManifestResourceNames().First(s => s.EndsWith(name));
+
+            using (Stream stream = thisAssembly.GetManifestResourceStream(resourceName))
+            {
+                //Считываем ресурс в массив байтов
+                byte[] block = new byte[stream.Length];
+                stream.Read(block, 0, block.Length);
+                //Загружаем сборку из массива байтов в текущий домен приложения и возвращаем её
+                return Assembly.Load(block);
             }
         }
 

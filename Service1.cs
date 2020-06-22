@@ -28,6 +28,7 @@ namespace ASTAService
         public AstaServiceLocal()
         {
             InitializeComponent();
+
             log = new Logger();
         }
 
