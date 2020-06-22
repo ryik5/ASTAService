@@ -87,7 +87,7 @@ namespace ASTAService
         private static string DetermineEmbeddedResourceName(AssemblyName assemblyName, Assembly executingAssembly)
         {
             //This assumes you have the assemblies in a folder named "EmbeddedAssemblies"
-            string resourceName = $"{executingAssembly.GetName().Name}.EmbeddedAssemblies.{assemblyName.Name}.dll";
+            string resourceName = $"{executingAssembly.GetName().Name}.Resources.{assemblyName.Name}.dll";
 
             //This logic finds the assembly manifest name even if it's not an case match for the requested assembly                          
             var matchingResource = executingAssembly.GetManifestResourceNames()
