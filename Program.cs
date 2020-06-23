@@ -15,7 +15,7 @@ namespace ASTAService
         {
             AssemblyLoader.RegisterAssemblyLoader();
 
-          WindowsServiceClass  uninstallService = new WindowsServiceClass();
+            WindowsServiceClass uninstallService = new WindowsServiceClass();
             uninstallService.EvntInfoMessage += UninstallService_EvntInfoMessage;
 
             service = new AstaServiceLocal();
@@ -23,7 +23,7 @@ namespace ASTAService
             if (args?.Length > 0)
             {
                 foreach (var str in args)
-                    service.WriteString($"Got environment argument '{str}'");
+                    service.LogText($"Got environment argument '{str}'");
             }
 
             ServiceBase[] ServicesToRun;
@@ -95,8 +95,7 @@ namespace ASTAService
 
         private static void UninstallService_EvntInfoMessage(object sender, TextEventArgs e)
         {
-            service.WriteString(e.Message);
+            service.LogText(e.Message);
         }
-
     }
 }

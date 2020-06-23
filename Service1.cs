@@ -36,9 +36,9 @@ namespace ASTAService
 
         internal void Start()
         {
-            RunDirWatcher();
+            StartDirWatcherThread();
 
-            RunWebsocketClient();
+            StartWebsocketClientThread();
 
             timer = new System.Timers.Timer(10000);//создаём объект таймера
             timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
@@ -46,32 +46,26 @@ namespace ASTAService
             timer.Start();
         }
 
-        private void RunDirWatcher()
+        private void StartDirWatcherThread()
         {
-            dirWatcherThread = new Thread(new ThreadStart(InitDirWatcher));
+            dirWatcherThread = new Thread(new ThreadStart(StartDirWatcher));
             dirWatcherThread.SetApartmentState(ApartmentState.STA); //ApartmentState.STA - поток надолго НЕ ЗАНИМАТЬ!
             dirWatcherThread.IsBackground = true;
 
             dirWatcherThread.Start();
         }
-        private void InitDirWatcher()
+        private void StartDirWatcher()
         {
             direcoryWatcherlog = new DirectoryWatchLogger();
-            direcoryWatcherlog.EvntInfoMessage += new DirectoryWatchLogger.InfoMessage(WebSocketSend_EvntInfoMessage);
+            direcoryWatcherlog.EvntInfoMessage += new DirectoryWatchLogger.InfoMessage(DirectoryWatcher_EvntInfoMessage);
             direcoryWatcherlog.SetDirWatcher(@"d:\temp");
 
             direcoryWatcherlog.StartWatcher();
         }
 
-        private void WebSocketSend_EvntInfoMessage(object sender, TextEventArgs e)
+        private void DirectoryWatcher_EvntInfoMessage(object sender, TextEventArgs e)
         {
-            if (webSocket != null)
-            {
-                if (webSocket.Connected)
-                {
-                    webSocket.Send(e.Message); //test webSocketServer
-                }
-            }
+            SendMessage(e.Message);
         }
 
         private void StopDirWatcher()
@@ -79,9 +73,9 @@ namespace ASTAService
             try { direcoryWatcherlog?.StopWatcher(); } catch { }
             try { dirWatcherThread?.Abort(); } catch { }
         }
-        private void RunWebsocketClient()
+        private void StartWebsocketClientThread()
         {
-            webThread = new Thread(new ThreadStart(StartWebSocket));
+            webThread = new Thread(new ThreadStart(StartWebsocketClient));
             webThread.SetApartmentState(ApartmentState.STA);
             webThread.IsBackground = true;
 
@@ -92,49 +86,66 @@ namespace ASTAService
             try
             {
                 webSocket?.Close();
-                webSocket.EvntInfoMessage -= WebSocket_EvntInfoMessage;
+                webSocket.EvntInfoMessage -= webSocketClientGotMessage_EvntInfoMessage;
                 webSocket = null;
+            }
+            catch { }
+        }
+        private void StopTimer()
+        {
+            try
+            {
+                timer.Enabled = false;
+                timer.Stop();
+                timer.Dispose();
             }
             catch { }
         }
 
         protected override void OnStop()
         {
-            try
-            {
-                timer.Enabled = false;
-                timer.Stop();
-            }
-            catch { }
-
+            StopTimer();
             StopWebsocketClient();
             StopDirWatcher();
         }
 
-        public void WriteString(string text)
+        public void LogText(string text)
         {
             if (log != null)
                 log.WriteString(text);
         }
 
-        private void StartWebSocket()
+        private void StartWebsocketClient()
         {
             webSocket = new WebSocketManager(webSocketUri);
-            webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(WebSocket_EvntInfoMessage);
+            webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(webSocketClientGotMessage_EvntInfoMessage);
+        }
+        private void webSocketClientGotMessage_EvntInfoMessage(object sender, TextEventArgs e)
+        {
+            var json = e.Message;
+            LogText($"{json}");
         }
 
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
         {
-            WriteString($"Служба '{nameof(AstaServiceLocal)}' активная...");
             timer.Enabled = false;
             timer.Stop();
 
             //Запускаем процедуру (чего хотим выполнить по таймеру).
+            SendMessage("Пинг");
+
+            timer.Enabled = true;
+            timer.Start();
+        }
+
+        private void SendMessage(string text)
+        {
             if (webSocket != null)
             {
                 if (webSocket.Connected)
                 {
-                    webSocket.Send("Ping"); //test webSocketServer
+                    webSocket.Send(text); //test webSocketServer
+                    LogText($"Отправлен текст: '{text}'");
                 }
                 else
                 {
@@ -143,21 +154,43 @@ namespace ASTAService
             }
             else
             {
-                WriteString("К серверу не подключен.");
-                Task.Run(() => RunWebsocketClient());
+                LogText("Создаю подключение....");
+                Task.Run(() => StartWebsocketClientThread());
             }
-
-            timer.Enabled = true;
-            timer.Start();
-        }
-
-        private void WebSocket_EvntInfoMessage(object sender, TextEventArgs e)
-        {
-            WriteString(e.Message);
         }
     }
 
+    /// <summary>
+    /// Defines the type of response to send back to the client for parsing logic
+    /// </summary>
+    public enum ResponseType
+    {
+        Connection = 0,
+        Disconnect = 1,
+        Message = 2,
+        NameChange = 3,
+        UserCount = 4,
+        Error = 255
+    }
 
+    /// <summary>
+    /// Defines the response object to send back to the client
+    /// </summary>
+    public class Response
+    {
+        public ResponseType Type { get; set; }
+        public dynamic Data { get; set; }
+    }
+
+    /// <summary>
+    /// Defines a type of command that the client sends to the server
+    /// </summary>
+    public enum CommandType
+    {
+        Register = 0,
+        NameChange,
+        Message
+    }
 
     /// <summary>
     /// Утилита саморегистрации
@@ -422,10 +455,10 @@ namespace ASTAService
         {
             string path = Assembly.GetExecutingAssembly().Location;
             string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
-            string message = null;
+
             lock (obj)
             {
-                message = $"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{typo}|{filePath}";
+              string  message = $"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{typo}|{filePath}";
 
                 EvntInfoMessage?.Invoke(this, new TextEventArgs(message));
 
@@ -475,7 +508,7 @@ namespace ASTAService
         public bool Connected { get { return webSocket.State == WebSocketState.Open; } }
         public WebSocketManager(string webSocketUri)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Initializing websocket. Uri: " + webSocketUri));
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Инициализация websocket client с Uri: " + webSocketUri));
 
             webSocket = new WebSocket(webSocketUri);
             webSocket.Opened += new EventHandler(websocket_Opened);
@@ -488,13 +521,13 @@ namespace ASTAService
                                                                         // so we need to wait until connection established
             if (webSocket.State != WebSocketState.Open)
             {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Connection is not opened."));
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение не установлено"));
             }
         }
 
         public string Send(string data)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("I want to send data:" + data));
+            EvntInfoMessage?.Invoke(this, new TextEventArgs($"Отправляю сообщение: '{data}'"));
 
             var r = new Response { Type = ResponseType.Message, Data = data };
 
@@ -502,19 +535,19 @@ namespace ASTAService
 
             webSocket.Send(obj);
             if (!messageReceiveEvent.WaitOne(5000))                         // waiting for the response with 5 secs timeout
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Cannot receive the response. Timeout."));
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подтверждение от сервера о получении сообщения не получено. Timeout."));
 
             return lastMessageReceived;
         }
 
         public void Close()
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Closing websocket..."));
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Закрываю websocket..."));
             webSocket.Close();
         }
         private void websocket_Opened(object sender, EventArgs e)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Websocket is opened."));
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Websocket открыт..."));
         }
         private void websocket_Error(object sender, SuperSocket.ClientEngine.ErrorEventArgs e)
         {
@@ -522,11 +555,11 @@ namespace ASTAService
         }
         private void websocket_Closed(object sender, EventArgs e)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Websocket is closed."));
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Websocket закрыт."));
         }
         private void websocket_MessageReceived(object sender, MessageReceivedEventArgs e)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs($"Получены \"сырые\" данные: {e.Message}"));
+            EvntInfoMessage?.Invoke(this, new TextEventArgs($"От сервера получено сообщение: {e.Message}"));
 
             try
             {
@@ -536,19 +569,23 @@ namespace ASTAService
                 switch ((int)obj.Type)
                 {
                     case (int)CommandType.Register:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Обработка не написана - Register" + +obj?.Data?.Value));
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка кода не написана - Register: {obj?.Data?.Value}"));
                         break;
                     case (int)CommandType.Message:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Получено сообщение: " + obj?.Data?.Value));
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение: {obj?.Data?.Value}"));
                         break;
                     case (int)CommandType.NameChange:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs("Обработка не написана - NameChange: " + obj?.Data?.Value));
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка код не написана - NameChange: {obj?.Data?.Value}"));
                         break;
+                    default:
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Неизвестный код сообщения: {obj?.Data?.Value}"));
+                        break;
+
                 }
             }
             catch (Exception err)
             {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Полученные данные не распознаны: " + err.Message));
+                EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение не распознано: {err.Message}"));
             }
 
             lastMessageReceived = e.Message;
@@ -584,6 +621,4 @@ namespace ASTAService
             Message
         }
     }
-
-
 }

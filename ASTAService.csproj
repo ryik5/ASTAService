@@ -47,6 +47,9 @@
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>RYIK_40.ico</ApplicationIcon>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="Alchemy, Version=2.2.0.238, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>packages\Alchemy.2.2.1\lib\net40\Alchemy.dll</HintPath>
@@ -107,7 +110,6 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="StartStopTimer.cs" />
     <Compile Include="TextEventArgs.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -131,15 +133,7 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Resources\Alchemy.dll" />
-    <None Include="Resources\log4net.dll" />
-    <None Include="Resources\Newtonsoft.Json.dll" />
-    <None Include="Resources\SuperSocket.ClientEngine.dll" />
-    <None Include="Resources\SuperSocket.Common.dll" />
-    <None Include="Resources\SuperSocket.Facility.dll" />
-    <None Include="Resources\SuperSocket.SocketBase.dll" />
-    <None Include="Resources\SuperSocket.WebSocket.dll" />
-    <None Include="Resources\WebSocket4Net.dll" />
+    <Content Include="RYIK_40.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
