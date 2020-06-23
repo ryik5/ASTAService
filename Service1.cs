@@ -6,9 +6,10 @@ using System.Runtime.InteropServices;
 using System.ServiceProcess;
 using System.Threading;
 using System.Timers;
-using WebSocket4Net;
 using Newtonsoft.Json;
 using System.Threading.Tasks;
+using Alchemy;
+using Alchemy.Classes;
 
 namespace ASTAService
 {
@@ -501,69 +502,57 @@ namespace ASTAService
     public class WebSocketManager
     {
         private AutoResetEvent messageReceiveEvent = new AutoResetEvent(false);
-        private string lastMessageReceived;
-        private WebSocket webSocket;
+        private WebSocketClient webClient;
         public delegate void InfoMessage(object sender, TextEventArgs e);
         public event InfoMessage EvntInfoMessage;
-        public bool Connected { get { return webSocket.State == WebSocketState.Open; } }
+        public bool Connected
+        {
+            get
+            {
+                if (webClient != null)
+                    return webClient.Connected;
+                else 
+                    return false;
+            }
+        }
         public WebSocketManager(string webSocketUri)
         {
             EvntInfoMessage?.Invoke(this, new TextEventArgs("Инициализация websocket client с Uri: " + webSocketUri));
 
-            webSocket = new WebSocket(webSocketUri);
-            webSocket.Opened += new EventHandler(websocket_Opened);
-            webSocket.Closed += new EventHandler(websocket_Closed);
-            webSocket.Error += new EventHandler<SuperSocket.ClientEngine.ErrorEventArgs>(websocket_Error);
-            webSocket.MessageReceived += new EventHandler<MessageReceivedEventArgs>(websocket_MessageReceived);
+            webClient = new WebSocketClient(webSocketUri)
+            { 
+                OnReceive = OnClientReceive , 
+                ConnectTimeout=TimeSpan.FromMilliseconds(5000),
+                 OnDisconnect= OnClientDisconnect
+            };
+            
+            webClient.Connect();
 
-            webSocket.Open();
-            while (webSocket.State == WebSocketState.Connecting) { };   // by default webSocket4Net has AutoSendPing=true, 
-                                                                        // so we need to wait until connection established
-            if (webSocket.State != WebSocketState.Open)
+            if (webClient.Connected && webClient.ReadyState==  WebSocketClient.ReadyStates.OPEN)
             {
                 EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение не установлено"));
             }
+            else
+            {
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение установлено"));
+            }
         }
 
-        public string Send(string data)
+        private void OnClientDisconnect(UserContext context)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs($"Отправляю сообщение: '{data}'"));
-
-            var r = new Response { Type = ResponseType.Message, Data = data };
-
-            dynamic obj = JsonConvert.SerializeObject(r);
-
-            webSocket.Send(obj);
-            if (!messageReceiveEvent.WaitOne(5000))                         // waiting for the response with 5 secs timeout
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подтверждение от сервера о получении сообщения не получено. Timeout."));
-
-            return lastMessageReceived;
+            context.Send("Disconnecting");
+            webClient?.Disconnect();
         }
 
-        public void Close()
+        private void OnClientReceive(UserContext context)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Закрываю websocket..."));
-            webSocket.Close();
-        }
-        private void websocket_Opened(object sender, EventArgs e)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Websocket открыт..."));
-        }
-        private void websocket_Error(object sender, SuperSocket.ClientEngine.ErrorEventArgs e)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs(e.Exception.Message));
-        }
-        private void websocket_Closed(object sender, EventArgs e)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Websocket закрыт."));
-        }
-        private void websocket_MessageReceived(object sender, MessageReceivedEventArgs e)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs($"От сервера получено сообщение: {e.Message}"));
+            var data = context.DataFrame.ToString();
+
+            EvntInfoMessage?.Invoke(this, new TextEventArgs($"От сервера получено сообщение: {data}"));
 
             try
             {
-                dynamic obj = JsonConvert.DeserializeObject(e.Message);
+                dynamic obj = JsonConvert.DeserializeObject(data);
                 EvntInfoMessage?.Invoke(this, new TextEventArgs($"Десериализованные данные: {obj}"));
 
                 switch ((int)obj.Type)
@@ -587,9 +576,30 @@ namespace ASTAService
             {
                 EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение не распознано: {err.Message}"));
             }
+            //context.Send(data);
+        }
 
-            lastMessageReceived = e.Message;
-            messageReceiveEvent.Set();
+        public void Send(string data)
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs($"Отправляю сообщение: '{data}'"));
+
+            var r = new Response { Type = ResponseType.Message, Data = data };
+
+            dynamic obj = JsonConvert.SerializeObject(r);
+
+            if(webClient.Connected)
+            webClient.Send(obj);
+
+            if (!messageReceiveEvent.WaitOne(7000))                         // waiting for the response with 5 secs timeout
+            {
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подтверждение от сервера о получении сообщения не получено. Timeout."));
+            }
+        }
+
+        public void Close()
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Закрываю websocket..."));
+            webClient.Disconnect();
         }
 
         /// <summary>
