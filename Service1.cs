@@ -21,7 +21,7 @@ namespace ASTAService
         static readonly Logger log = new Logger();
 
         WebSocketManager webSocket;
-        static readonly string webSocketUri = "ws://localhost:5000";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
+        static readonly string webSocketUri = "ws://10.0.102.54:5000/path";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
 
         public AstaServiceLocal()
         {
