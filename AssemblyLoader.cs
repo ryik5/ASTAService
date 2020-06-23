@@ -7,7 +7,7 @@ namespace ASTAService
 {
     internal static class AssemblyLoader
     {
-    //https://stackoverrun.com/ru/q/4794740
+        //https://stackoverrun.com/ru/q/4794740
         internal static void RegisterAssemblyLoader()
         {
             AppDomain currentDomain = AppDomain.CurrentDomain;
@@ -22,44 +22,37 @@ namespace ASTAService
 
         private static Assembly LoadAssemblyFromManifest(string targetAssemblyName)
         {
-            Logger log = new Logger();
-            log.WriteString("targetAssemblyName: " + targetAssemblyName);
+            Logger.WriteString("targetAssemblyName: " + targetAssemblyName);
             Assembly executingAssembly = Assembly.GetExecutingAssembly();
             byte[] assemblyRawBytes = null;
 
-         var names=   typeof(Program).Assembly.GetManifestResourceNames();
-            foreach (var n in names)
-            {
-                log.WriteString("n: " + n);
-            }
+            //var names = typeof(Program).Assembly.GetManifestResourceNames();
+            //foreach (var n in names)
+            //{
+            //    log.WriteString("n: " + n);
+            //}
 
             try
             {
                 AssemblyName assemblyName = new AssemblyName(targetAssemblyName);
 
                 string resourceName = DetermineEmbeddedResourceName(assemblyName, executingAssembly);
-                log.WriteString("resourceName: " + resourceName);
-
 
                 using (Stream stream = executingAssembly.GetManifestResourceStream(resourceName))
                 {
                     if (stream == null)
                     {
-                        log.WriteString("length = 0. Not found");
+                        Logger.WriteString($"length = 0. {resourceName} not found");
                         return null;
-                    }
-                    else
-                    {
-                        log.WriteString("length! =0");
-
                     }
 
                     assemblyRawBytes = new byte[stream.Length];
                     stream.Read(assemblyRawBytes, 0, assemblyRawBytes.Length);
+
+                    Logger.WriteString($"{resourceName} loaded");
                 }
             }
-            catch (Exception err) { log.WriteString("err: " + err.ToString()); }
-            log.WriteString("loaded");
+            catch (Exception err) { Logger.WriteString($"err: {err.ToString()}"); }
 
             return Assembly.Load(assemblyRawBytes);
 
@@ -86,12 +79,13 @@ namespace ASTAService
 
         private static string DetermineEmbeddedResourceName(AssemblyName assemblyName, Assembly executingAssembly)
         {
-            //This assumes you have the assemblies in a folder named "EmbeddedAssemblies"
+            //This assumes you have the assemblies in a folder named "Resources"
             string resourceName = $"{executingAssembly.GetName().Name}.Resources.{assemblyName.Name}.dll";
 
             //This logic finds the assembly manifest name even if it's not an case match for the requested assembly                          
-            var matchingResource = executingAssembly.GetManifestResourceNames()
-                                                    .FirstOrDefault(res => res.ToLower() == resourceName.ToLower());
+            var matchingResource = executingAssembly
+                .GetManifestResourceNames()
+                .FirstOrDefault(res => res.ToLower() == resourceName.ToLower());
 
             if (matchingResource != null)
             {

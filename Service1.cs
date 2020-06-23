@@ -19,7 +19,6 @@ namespace ASTAService
         private Thread dirWatcherThread = null;
         private Thread webThread = null;
         DirectoryWatchLogger direcoryWatcherlog = null;
-        static Logger log = null;
 
         static readonly string webserverSocketUri = "ws://10.0.102.54:5000/path";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
         WebSocketClient client;
@@ -28,8 +27,7 @@ namespace ASTAService
         public AstaServiceLocal()
         {
             InitializeComponent();
-
-            log = new Logger();
+            AssemblyLoader.RegisterAssemblyLoader();
         }
 
 
@@ -40,7 +38,7 @@ namespace ASTAService
 
         internal void Start()
         {
-            RunDirWatcher();
+         //   RunDirWatcher();
 
             RunWebsocketClient();
 
@@ -48,6 +46,7 @@ namespace ASTAService
             timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
             timer.Enabled = true;
             timer.Start();
+            WriteString("timer is running");
         }
 
         private void RunDirWatcher()
@@ -65,6 +64,7 @@ namespace ASTAService
             direcoryWatcherlog.SetDirWatcher(@"d:\temp");
 
             direcoryWatcherlog.StartWatcher();
+            WriteString("DirectoryWatchLogger is running");
         }
 
         private void WebSocketSend_EvntInfoMessage(object sender, TextEventArgs e)
@@ -74,7 +74,10 @@ namespace ASTAService
 
         private void StopDirWatcher()
         {
-            try { direcoryWatcherlog?.StopWatcher(); } catch { }
+            try { direcoryWatcherlog?.StopWatcher();
+                WriteString("DirectoryWatchLogger was stoped");
+            }
+            catch { }
             try { dirWatcherThread?.Abort(); } catch { }
         }
         private void RunWebsocketClient()
@@ -91,6 +94,7 @@ namespace ASTAService
             {
                 client.Disconnect();
                 client = null;
+                WriteString("Websocket client was stoped");
             }
             catch { }
         }
@@ -108,22 +112,37 @@ namespace ASTAService
         }
         public void WriteString(string text)
         {
-            if (log != null)
-                log.WriteString(text);
+            Logger.WriteString(text);
         }
 
         private void InitWebSocketConnection()
         {
             client = new WebSocketClient(webserverSocketUri)
             {
-                OnReceive = OnClientReceive
+              //  OnReceive = OnClientReceive,
+              //  OnConnected=OnClientConnected
             };
+            WriteString("Websocket client is running");
             ConnectToServer();
         }
+
+        private void OnClientConnected(UserContext context)
+        {
+            WriteString($"Client connected {context.ClientAddress}");
+        }
+
         private void ConnectToServer()
         {
             if (client != null && !client.Connected)
-            { client.Connect(); }
+            {
+                try { client.Connect();
+                    WriteString("Websocket client is connected...");
+                }
+                catch (Exception err)
+                {
+                    Logger.WriteString($"ConnectToServer err: {err.Message}");
+                }
+            }
         }
         private void OnClientReceive(UserContext context)
         {
@@ -189,13 +208,13 @@ namespace ASTAService
                 }
                 else
                 {
-                    Task.Run(() => ConnectToServer());
+                     ConnectToServer();
                 }
             }
             else
             {
-                WriteString("К серверу не подключен.");
-                Task.Run(() => RunWebsocketClient());
+                WriteString("Запускаю клиента....");
+                 RunWebsocketClient();
             }
 
             timer.Enabled = true;
@@ -535,18 +554,15 @@ namespace ASTAService
         }
     }
 
-    public class Logger
+    public static class Logger
     {
-        readonly object obj = new object();
-
-        public Logger() { }
-
-        public void WriteString(string text)
+        public static void WriteString(string text)
         {
             RecordEntry("Message", text);
         }
-        private void RecordEntry(string eventText, string text)
+        private static void RecordEntry(string eventText, string text)
         {
+            object obj = new object();
             string path = Assembly.GetExecutingAssembly().Location;
             string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
             lock (obj)
