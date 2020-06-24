@@ -57,6 +57,7 @@ namespace ASTAWebClient
                                 serviceManagable.AddInfo("Running service");
                             }
                             break;
+
                         case "uninstall":
                         case "u":
                             ServiceInstallerUtility.StopService();
@@ -73,8 +74,8 @@ namespace ASTAWebClient
 
                             string processName = System.IO.Path.GetFileName(ServiceInstallerUtility.serviceExePath);
                             System.Diagnostics.Process.Start("taskkill", $"/F /IM {processName}");
-
                             break;
+
                         default:
                             serviceManagable.OnStart();
                             // ServiceInstallerUtility.Install();

@@ -72,7 +72,7 @@
     <Compile Include="Classes\AssemblyLoader.cs" />
     <Compile Include="Classes\BL\ServiceManager.cs" />
     <Compile Include="Classes\IServiceManageable.cs" />
-    <Compile Include="Classes\Loggers.cs" />
+    <Compile Include="Classes\BL\Loggers.cs" />
     <Compile Include="Classes\ServiceInstallClasses.cs">
       <SubType>Component</SubType>
     </Compile>

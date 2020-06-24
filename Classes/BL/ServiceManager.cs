@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
@@ -60,20 +57,20 @@ namespace ASTAWebClient
             timer.Stop();
 
             //Запускаем процедуру (чего хотим выполнить по таймеру).
-            SendMessage("Пинг");
+            if (CheckAliveServer())
+                SendMessage(ResponseType.ReadyToWork, "254");
 
             timer.Enabled = true;
             timer.Start();
         }
 
-        private void SendMessage(string text)
+        private bool CheckAliveServer()
         {
             if (webSocket != null)
             {
                 if (webSocket.Connected)
                 {
-                    webSocket.Send(text); //test webSocketServer
-                    AddInfo($"Отправлен текст: '{text}'");
+                    return true;
                 }
                 else
                 {
@@ -85,6 +82,13 @@ namespace ASTAWebClient
                 AddInfo("Создаю подключение....");
                 Task.Run(() => StartWebsocketClientThread());
             }
+            return false;
+        }
+
+        private void SendMessage(ResponseType type, string text)
+        {
+            webSocket.Send(type, text); //test webSocketServer
+            AddInfo($"Отправлен текст: '{text}'");
         }
 
         internal void Start()
@@ -118,7 +122,7 @@ namespace ASTAWebClient
 
         private void DirectoryWatcher_EvntInfoMessage(object sender, TextEventArgs e)
         {
-            SendMessage(e.Message);
+            SendMessage( ResponseType.Message, e.Message);
         }
 
         private void StopDirWatcher()
@@ -154,8 +158,5 @@ namespace ASTAWebClient
             }
             catch { }
         }
-
     }
-
-
 }

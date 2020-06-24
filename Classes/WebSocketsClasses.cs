@@ -7,6 +7,15 @@ using System.Threading;
 namespace ASTAWebClient
 {
 
+
+    /// <summary>
+    /// Defines the response object to send back to the client
+    /// </summary>
+    public class Response
+    {
+        public ResponseType Type { get; set; }
+        public dynamic Data { get; set; }
+    }
     /// <summary>
     /// Defines the type of response to send back to the client for parsing logic
     /// </summary>
@@ -17,26 +26,19 @@ namespace ASTAWebClient
         Message = 2,
         NameChange = 3,
         UserCount = 4,
+        ReadyToWork=254,
         Error = 255
     }
-
-    /// <summary>
-    /// Defines the response object to send back to the client
-    /// </summary>
-    public class Response
-    {
-        public ResponseType Type { get; set; }
-        public dynamic Data { get; set; }
-    }
-
     /// <summary>
     /// Defines a type of command that the client sends to the server
     /// </summary>
     public enum CommandType
     {
         Register = 0,
-        NameChange,
-        Message
+        NameChange = 1,
+        Message = 2,
+        DoWork = 254,
+        Nope = 255
     }
 
     public class WebSocketManager
@@ -119,11 +121,11 @@ namespace ASTAWebClient
             //context.Send(data);
         }
 
-        public void Send(string data)
+        public void Send(ResponseType   type,string data)
         {
             EvntInfoMessage?.Invoke(this, new TextEventArgs($"Отправляю сообщение: '{data}'"));
 
-            var r = new Response { Type = ResponseType.Message, Data = data };
+            var r = new Response { Type = type, Data = data };
 
             dynamic obj = JsonConvert.SerializeObject(r);
 

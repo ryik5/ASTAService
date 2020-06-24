@@ -23,5 +23,4 @@ namespace ASTAWebClient
             _serviceManagable.OnStop();
         }
     }
-
 }

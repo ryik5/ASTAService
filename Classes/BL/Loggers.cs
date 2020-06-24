@@ -8,11 +8,12 @@ namespace ASTAWebClient
     public class DirectoryWatchLogger
     {
         System.IO.FileSystemWatcher watcher;
+        public string pathToDir { get; private set; }
         readonly object obj = new object();
         bool enabled = true;
         public delegate void InfoMessage(object sender, TextEventArgs e);
         public event InfoMessage EvntInfoMessage;
-
+        public bool IsReady { get { return pathToDir != null && System.IO.Directory.Exists(pathToDir); } }
 
         public DirectoryWatchLogger() { }
         public DirectoryWatchLogger(string pathToDir)
@@ -24,10 +25,11 @@ namespace ASTAWebClient
         {
             watcher = new System.IO.FileSystemWatcher(pathToDir);
             watcher.IncludeSubdirectories = true;
-            watcher.Deleted += Watcher_Deleted;
-            watcher.Created += Watcher_Created;
+            watcher.Deleted += Watcher_Changed;
+            watcher.Created += Watcher_Changed;
             watcher.Changed += Watcher_Changed;
             watcher.Renamed += Watcher_Renamed;
+            this.pathToDir = pathToDir;
         }
 
         public void StartWatcher()
@@ -47,41 +49,26 @@ namespace ASTAWebClient
         // переименование файлов
         private void Watcher_Renamed(object sender, System.IO.RenamedEventArgs e)
         {
-            string fileEvent = "переименован в " + e.FullPath;
-            string filePath = e.OldFullPath;
-            RecordEntry(fileEvent, filePath, e.ChangeType);
+            string filePath = $"'{e.OldFullPath}' => '{e.FullPath}'";
+            RecordEntry(filePath, e.ChangeType);
         }
         // изменение файлов
+        // создание файлов
+        // удаление файлов
         private void Watcher_Changed(object sender, System.IO.FileSystemEventArgs e)
         {
-            string fileEvent = "изменен";
             string filePath = e.FullPath;
-            RecordEntry(fileEvent, filePath, e.ChangeType);
-        }
-        // создание файлов
-        private void Watcher_Created(object sender, System.IO.FileSystemEventArgs e)
-        {
-            string fileEvent = "создан";
-            string filePath = e.FullPath;
-
-            RecordEntry(fileEvent, filePath, e.ChangeType);
-        }
-        // удаление файлов
-        private void Watcher_Deleted(object sender, System.IO.FileSystemEventArgs e)
-        {
-            string fileEvent = "удален";
-            string filePath = e.FullPath;
-            RecordEntry(fileEvent, filePath, e.ChangeType);
+            RecordEntry(filePath, e.ChangeType);
         }
 
-        private void RecordEntry(string fileEvent, string filePath, System.IO.WatcherChangeTypes typo)
+        private void RecordEntry(string filePath, System.IO.WatcherChangeTypes evntChanging)
         {
             string path = Assembly.GetExecutingAssembly().Location;
             string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
 
             lock (obj)
             {
-                string message = $"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{typo}|{filePath}";
+                string message = $"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{evntChanging}|{filePath}";
 
                 EvntInfoMessage?.Invoke(this, new TextEventArgs(message));
 
@@ -119,6 +106,4 @@ namespace ASTAWebClient
             }
         }
     }
-
-
 }
