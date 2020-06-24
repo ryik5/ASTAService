@@ -15,7 +15,30 @@ namespace ASTAService
 {
     public partial class AstaServiceLocal : ServiceBase
     {
-        private System.Timers.Timer timer = null;
+
+        IServiceManagable _serviceManagable;
+        public AstaServiceLocal(IServiceManagable serviceManagable)
+        {
+            InitializeComponent();
+            _serviceManagable = serviceManagable;
+        }
+
+
+        protected override void OnStart(string[] args)
+        {
+            _serviceManagable.OnStart();
+        }
+
+        protected override void OnStop()
+        {
+            _serviceManagable.OnStop();
+        }
+    }
+
+
+    public class ServiceManager : IServiceManagable
+    {
+         private System.Timers.Timer timer = null;
         private Thread dirWatcherThread = null;
         private Thread webThread = null;
         DirectoryWatchLogger direcoryWatcherlog = null;
@@ -23,16 +46,72 @@ namespace ASTAService
 
         WebSocketManager webSocket;
         static readonly string webSocketUri = "ws://10.0.102.54:5000/path";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
-
-        public AstaServiceLocal()
+      
+        public void OnPause()
         {
-            InitializeComponent();
+            throw new NotImplementedException();
         }
 
-
-        protected override void OnStart(string[] args)
+        public void OnStart()
         {
             Start();
+        }
+
+        public void OnStop()
+        {
+            StopTimer();
+            StopWebsocketClient();
+            StopDirWatcher();
+        }
+
+        public void AddInfo(string text)
+        {
+            if (log != null)
+                log.WriteString(text);
+        }
+
+        private void StartWebsocketClient()
+        {
+            webSocket = new WebSocketManager(webSocketUri);
+            webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(webSocketClientGotMessage_EvntInfoMessage);
+        }
+        private void webSocketClientGotMessage_EvntInfoMessage(object sender, TextEventArgs e)
+        {
+            var json = e.Message;
+            AddInfo($"{json}");
+        }
+
+        private void timer_Elapsed(object sender, ElapsedEventArgs e)
+        {
+            timer.Enabled = false;
+            timer.Stop();
+
+            //Запускаем процедуру (чего хотим выполнить по таймеру).
+            SendMessage("Пинг");
+
+            timer.Enabled = true;
+            timer.Start();
+        }
+
+        private void SendMessage(string text)
+        {
+            if (webSocket != null)
+            {
+                if (webSocket.Connected)
+                {
+                    webSocket.Send(text); //test webSocketServer
+                    AddInfo($"Отправлен текст: '{text}'");
+                }
+                else
+                {
+                    Task.Run(() => StopWebsocketClient());
+                }
+            }
+            else
+            {
+                AddInfo("Создаю подключение....");
+                Task.Run(() => StartWebsocketClientThread());
+            }
         }
 
         internal void Start()
@@ -103,63 +182,16 @@ namespace ASTAService
             catch { }
         }
 
-        protected override void OnStop()
-        {
-            StopTimer();
-            StopWebsocketClient();
-            StopDirWatcher();
-        }
-
-        public void LogText(string text)
-        {
-            if (log != null)
-                log.WriteString(text);
-        }
-
-        private void StartWebsocketClient()
-        {
-            webSocket = new WebSocketManager(webSocketUri);
-            webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(webSocketClientGotMessage_EvntInfoMessage);
-        }
-        private void webSocketClientGotMessage_EvntInfoMessage(object sender, TextEventArgs e)
-        {
-            var json = e.Message;
-            LogText($"{json}");
-        }
-
-        private void timer_Elapsed(object sender, ElapsedEventArgs e)
-        {
-            timer.Enabled = false;
-            timer.Stop();
-
-            //Запускаем процедуру (чего хотим выполнить по таймеру).
-            SendMessage("Пинг");
-
-            timer.Enabled = true;
-            timer.Start();
-        }
-
-        private void SendMessage(string text)
-        {
-            if (webSocket != null)
-            {
-                if (webSocket.Connected)
-                {
-                    webSocket.Send(text); //test webSocketServer
-                    LogText($"Отправлен текст: '{text}'");
-                }
-                else
-                {
-                    Task.Run(() => StopWebsocketClient());
-                }
-            }
-            else
-            {
-                LogText("Создаю подключение....");
-                Task.Run(() => StartWebsocketClientThread());
-            }
-        }
     }
+
+    public interface IServiceManagable
+    {
+        void OnStart();
+        void OnStop();
+        void OnPause();
+        void AddInfo(string text);
+    }
+
 
     /// <summary>
     /// Defines the type of response to send back to the client for parsing logic
@@ -192,6 +224,229 @@ namespace ASTAService
         NameChange,
         Message
     }
+
+    public class WebSocketManager
+    {
+        private AutoResetEvent messageReceiveEvent = new AutoResetEvent(false);
+        private WebSocketClient webClient;
+        public delegate void InfoMessage(object sender, TextEventArgs e);
+        public event InfoMessage EvntInfoMessage;
+        public bool Connected
+        {
+            get
+            {
+                if (webClient != null)
+                    return webClient.Connected;
+                else 
+                    return false;
+            }
+        }
+        public WebSocketManager(string webSocketUri)
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Инициализация websocket client с Uri: " + webSocketUri));
+
+            webClient = new WebSocketClient(webSocketUri)
+            { 
+                OnReceive = OnClientReceive , 
+                ConnectTimeout=TimeSpan.FromMilliseconds(5000),
+                 OnDisconnect= OnClientDisconnect
+            };
+            
+            webClient.Connect();
+
+            if (webClient.Connected && webClient.ReadyState==  WebSocketClient.ReadyStates.OPEN)
+            {
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение не установлено"));
+            }
+            else
+            {
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение установлено"));
+            }
+        }
+
+        private void OnClientDisconnect(UserContext context)
+        {
+            context.Send("Disconnecting");
+            webClient?.Disconnect();
+        }
+
+        private void OnClientReceive(UserContext context)
+        {
+            var data = context.DataFrame.ToString();
+
+            EvntInfoMessage?.Invoke(this, new TextEventArgs($"От сервера получено сообщение: {data}"));
+
+            try
+            {
+                dynamic obj = JsonConvert.DeserializeObject(data);
+                EvntInfoMessage?.Invoke(this, new TextEventArgs($"Десериализованные данные: {obj}"));
+
+                switch ((int)obj.Type)
+                {
+                    case (int)CommandType.Register:
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка кода не написана - Register: {obj?.Data?.Value}"));
+                        break;
+                    case (int)CommandType.Message:
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение: {obj?.Data?.Value}"));
+                        break;
+                    case (int)CommandType.NameChange:
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка код не написана - NameChange: {obj?.Data?.Value}"));
+                        break;
+                    default:
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Неизвестный код сообщения: {obj?.Data?.Value}"));
+                        break;
+
+                }
+            }
+            catch (Exception err)
+            {
+                EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение не распознано: {err.Message}"));
+            }
+            //context.Send(data);
+        }
+
+        public void Send(string data)
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs($"Отправляю сообщение: '{data}'"));
+
+            var r = new Response { Type = ResponseType.Message, Data = data };
+
+            dynamic obj = JsonConvert.SerializeObject(r);
+
+            if(webClient.Connected)
+            webClient.Send(obj);
+
+            if (!messageReceiveEvent.WaitOne(7000))                         // waiting for the response with 5 secs timeout
+            {
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подтверждение от сервера о получении сообщения не получено. Timeout."));
+            }
+        }
+
+        public void Close()
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Закрываю websocket..."));
+            webClient.Disconnect();
+        }
+
+    }
+
+
+    public class DirectoryWatchLogger
+    {
+        System.IO.FileSystemWatcher watcher;
+        readonly object obj = new object();
+        bool enabled = true;
+        public delegate void InfoMessage(object sender, TextEventArgs e);
+        public event InfoMessage EvntInfoMessage;
+
+
+        public DirectoryWatchLogger() { }
+        public DirectoryWatchLogger(string pathToDir)
+        {
+            SetDirWatcher(pathToDir);
+        }
+
+        public void SetDirWatcher(string pathToDir)
+        {
+            watcher = new System.IO.FileSystemWatcher(pathToDir);
+            watcher.IncludeSubdirectories = true;
+            watcher.Deleted += Watcher_Deleted;
+            watcher.Created += Watcher_Created;
+            watcher.Changed += Watcher_Changed;
+            watcher.Renamed += Watcher_Renamed;
+        }
+
+        public void StartWatcher()
+        {
+            watcher.EnableRaisingEvents = true;
+            while (enabled)
+            {
+                Thread.Sleep(1000);
+            }
+        }
+        public void StopWatcher()
+        {
+            watcher.EnableRaisingEvents = false;
+            enabled = false;
+        }
+
+        // переименование файлов
+        private void Watcher_Renamed(object sender, System.IO.RenamedEventArgs e)
+        {
+            string fileEvent = "переименован в " + e.FullPath;
+            string filePath = e.OldFullPath;
+            RecordEntry(fileEvent, filePath, e.ChangeType);
+        }
+        // изменение файлов
+        private void Watcher_Changed(object sender, System.IO.FileSystemEventArgs e)
+        {
+            string fileEvent = "изменен";
+            string filePath = e.FullPath;
+            RecordEntry(fileEvent, filePath, e.ChangeType);
+        }
+        // создание файлов
+        private void Watcher_Created(object sender, System.IO.FileSystemEventArgs e)
+        {
+            string fileEvent = "создан";
+            string filePath = e.FullPath;
+
+            RecordEntry(fileEvent, filePath, e.ChangeType);
+        }
+        // удаление файлов
+        private void Watcher_Deleted(object sender, System.IO.FileSystemEventArgs e)
+        {
+            string fileEvent = "удален";
+            string filePath = e.FullPath;
+            RecordEntry(fileEvent, filePath, e.ChangeType);
+        }
+
+        private void RecordEntry(string fileEvent, string filePath, System.IO.WatcherChangeTypes typo)
+        {
+            string path = Assembly.GetExecutingAssembly().Location;
+            string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
+
+            lock (obj)
+            {
+              string  message = $"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{typo}|{filePath}";
+
+                EvntInfoMessage?.Invoke(this, new TextEventArgs(message));
+
+                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))
+                {
+                    writer.WriteLine(message);
+                    writer.Flush();
+                }
+            }
+        }
+    }
+
+
+    public class Logger
+    {
+        readonly object obj = new object();
+
+        public Logger() { }
+
+        public void WriteString(string text)
+        {
+            RecordEntry("Message", text);
+        }
+        private void RecordEntry(string eventText, string text)
+        {
+            string path = Assembly.GetExecutingAssembly().Location;
+            string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
+            lock (obj)
+            {
+                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))
+                {
+                    writer.WriteLine($"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{eventText}|{text}");
+                    writer.Flush();
+                }
+            }
+        }
+    }
+
+
 
     /// <summary>
     /// Утилита саморегистрации
@@ -383,252 +638,4 @@ namespace ASTAService
     }
 
 
-    public class DirectoryWatchLogger
-    {
-        System.IO.FileSystemWatcher watcher;
-        readonly object obj = new object();
-        bool enabled = true;
-        public delegate void InfoMessage(object sender, TextEventArgs e);
-        public event InfoMessage EvntInfoMessage;
-
-
-        public DirectoryWatchLogger() { }
-        public DirectoryWatchLogger(string pathToDir)
-        {
-            SetDirWatcher(pathToDir);
-        }
-
-        public void SetDirWatcher(string pathToDir)
-        {
-            watcher = new System.IO.FileSystemWatcher(pathToDir);
-            watcher.IncludeSubdirectories = true;
-            watcher.Deleted += Watcher_Deleted;
-            watcher.Created += Watcher_Created;
-            watcher.Changed += Watcher_Changed;
-            watcher.Renamed += Watcher_Renamed;
-        }
-
-        public void StartWatcher()
-        {
-            watcher.EnableRaisingEvents = true;
-            while (enabled)
-            {
-                Thread.Sleep(1000);
-            }
-        }
-        public void StopWatcher()
-        {
-            watcher.EnableRaisingEvents = false;
-            enabled = false;
-        }
-
-        // переименование файлов
-        private void Watcher_Renamed(object sender, System.IO.RenamedEventArgs e)
-        {
-            string fileEvent = "переименован в " + e.FullPath;
-            string filePath = e.OldFullPath;
-            RecordEntry(fileEvent, filePath, e.ChangeType);
-        }
-        // изменение файлов
-        private void Watcher_Changed(object sender, System.IO.FileSystemEventArgs e)
-        {
-            string fileEvent = "изменен";
-            string filePath = e.FullPath;
-            RecordEntry(fileEvent, filePath, e.ChangeType);
-        }
-        // создание файлов
-        private void Watcher_Created(object sender, System.IO.FileSystemEventArgs e)
-        {
-            string fileEvent = "создан";
-            string filePath = e.FullPath;
-
-            RecordEntry(fileEvent, filePath, e.ChangeType);
-        }
-        // удаление файлов
-        private void Watcher_Deleted(object sender, System.IO.FileSystemEventArgs e)
-        {
-            string fileEvent = "удален";
-            string filePath = e.FullPath;
-            RecordEntry(fileEvent, filePath, e.ChangeType);
-        }
-
-        private void RecordEntry(string fileEvent, string filePath, System.IO.WatcherChangeTypes typo)
-        {
-            string path = Assembly.GetExecutingAssembly().Location;
-            string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
-
-            lock (obj)
-            {
-              string  message = $"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{typo}|{filePath}";
-
-                EvntInfoMessage?.Invoke(this, new TextEventArgs(message));
-
-                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))
-                {
-                    writer.WriteLine(message);
-                    writer.Flush();
-                }
-            }
-        }
-    }
-
-
-    public class Logger
-    {
-        readonly object obj = new object();
-
-        public Logger() { }
-
-        public void WriteString(string text)
-        {
-            RecordEntry("Message", text);
-        }
-        private void RecordEntry(string eventText, string text)
-        {
-            string path = Assembly.GetExecutingAssembly().Location;
-            string pathToLog = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetFileNameWithoutExtension(path) + ".log");
-            lock (obj)
-            {
-                using (System.IO.StreamWriter writer = new System.IO.StreamWriter(pathToLog, true))
-                {
-                    writer.WriteLine($"{DateTime.Now.ToString("yyyy.MM.dd|hh:mm:ss")}|{eventText}|{text}");
-                    writer.Flush();
-                }
-            }
-        }
-    }
-
-
-    public class WebSocketManager
-    {
-        private AutoResetEvent messageReceiveEvent = new AutoResetEvent(false);
-        private WebSocketClient webClient;
-        public delegate void InfoMessage(object sender, TextEventArgs e);
-        public event InfoMessage EvntInfoMessage;
-        public bool Connected
-        {
-            get
-            {
-                if (webClient != null)
-                    return webClient.Connected;
-                else 
-                    return false;
-            }
-        }
-        public WebSocketManager(string webSocketUri)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Инициализация websocket client с Uri: " + webSocketUri));
-
-            webClient = new WebSocketClient(webSocketUri)
-            { 
-                OnReceive = OnClientReceive , 
-                ConnectTimeout=TimeSpan.FromMilliseconds(5000),
-                 OnDisconnect= OnClientDisconnect
-            };
-            
-            webClient.Connect();
-
-            if (webClient.Connected && webClient.ReadyState==  WebSocketClient.ReadyStates.OPEN)
-            {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение не установлено"));
-            }
-            else
-            {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение установлено"));
-            }
-        }
-
-        private void OnClientDisconnect(UserContext context)
-        {
-            context.Send("Disconnecting");
-            webClient?.Disconnect();
-        }
-
-        private void OnClientReceive(UserContext context)
-        {
-            var data = context.DataFrame.ToString();
-
-            EvntInfoMessage?.Invoke(this, new TextEventArgs($"От сервера получено сообщение: {data}"));
-
-            try
-            {
-                dynamic obj = JsonConvert.DeserializeObject(data);
-                EvntInfoMessage?.Invoke(this, new TextEventArgs($"Десериализованные данные: {obj}"));
-
-                switch ((int)obj.Type)
-                {
-                    case (int)CommandType.Register:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка кода не написана - Register: {obj?.Data?.Value}"));
-                        break;
-                    case (int)CommandType.Message:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение: {obj?.Data?.Value}"));
-                        break;
-                    case (int)CommandType.NameChange:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка код не написана - NameChange: {obj?.Data?.Value}"));
-                        break;
-                    default:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Неизвестный код сообщения: {obj?.Data?.Value}"));
-                        break;
-
-                }
-            }
-            catch (Exception err)
-            {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение не распознано: {err.Message}"));
-            }
-            //context.Send(data);
-        }
-
-        public void Send(string data)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs($"Отправляю сообщение: '{data}'"));
-
-            var r = new Response { Type = ResponseType.Message, Data = data };
-
-            dynamic obj = JsonConvert.SerializeObject(r);
-
-            if(webClient.Connected)
-            webClient.Send(obj);
-
-            if (!messageReceiveEvent.WaitOne(7000))                         // waiting for the response with 5 secs timeout
-            {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подтверждение от сервера о получении сообщения не получено. Timeout."));
-            }
-        }
-
-        public void Close()
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Закрываю websocket..."));
-            webClient.Disconnect();
-        }
-
-        /// <summary>
-        /// Defines the type of response to send back to the client for parsing logic
-        /// </summary>
-        public enum ResponseType
-        {
-            Connection = 0,
-            Disconnect = 1,
-            Message = 2,
-            NameChange = 3,
-            UserCount = 4,
-            Error = 255
-        }
-
-        /// <summary>
-        /// Defines the response object to send back to the client
-        /// </summary>
-        public class Response
-        {
-            public ResponseType Type { get; set; }
-            public dynamic Data { get; set; }
-        }
-
-        public enum CommandType
-        {
-            Register = 0,
-            NameChange,
-            Message
-        }
-    }
 }

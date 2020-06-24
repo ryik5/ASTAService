@@ -6,6 +6,7 @@ namespace ASTAService
     static class Program
     {
         static AstaServiceLocal service = null;
+        static IServiceManagable serviceManagable = null;
 
         /// <summary>
         /// The main entry point for the application
@@ -18,12 +19,13 @@ namespace ASTAService
             WindowsServiceClass uninstallService = new WindowsServiceClass();
             uninstallService.EvntInfoMessage += UninstallService_EvntInfoMessage;
 
-            service = new AstaServiceLocal();
+            serviceManagable = new ServiceManager(); 
+            service = new AstaServiceLocal(serviceManagable);
 
             if (args?.Length > 0)
             {
                 foreach (var str in args)
-                    service.LogText($"Got environment argument '{str}'");
+                    serviceManagable.AddInfo($"Got environment argument '{str}'");
             }
 
             ServiceBase[] ServicesToRun;
@@ -51,7 +53,7 @@ namespace ASTAService
                             }
                             else
                             {
-                                service.Start();
+                                serviceManagable.OnStart();
                                 //   MessageBox.Show("Running service");
                             }
                             break;
@@ -74,7 +76,7 @@ namespace ASTAService
 
                             break;
                         default:
-                            service.Start();
+                            serviceManagable.OnStart();
                             // ServiceInstallerUtility.Install();
                             break;
                     }
@@ -95,7 +97,7 @@ namespace ASTAService
 
         private static void UninstallService_EvntInfoMessage(object sender, TextEventArgs e)
         {
-            service.LogText(e.Message);
+            serviceManagable.AddInfo(e.Message);
         }
     }
 }
