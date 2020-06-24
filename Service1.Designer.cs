@@ -1,4 +1,4 @@
-﻿namespace ASTAService
+﻿namespace ASTAWebClient
 {
     partial class AstaServiceLocal
     {

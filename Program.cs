@@ -1,12 +1,12 @@
 ﻿using System;
 using System.ServiceProcess;
 
-namespace ASTAService
+namespace ASTAWebClient
 {
     static class Program
     {
         static AstaServiceLocal service = null;
-        static IServiceManagable serviceManagable = null;
+        static IServiceManageable serviceManagable = null;
 
         /// <summary>
         /// The main entry point for the application
@@ -49,12 +49,12 @@ namespace ASTAService
                         case "i":
                             if (!ServiceInstallerUtility.Install())
                             {
-                                //  MessageBox.Show("Failed to install service");
+                                serviceManagable.AddInfo("Failed to install service");
                             }
                             else
                             {
                                 serviceManagable.OnStart();
-                                //   MessageBox.Show("Running service");
+                                serviceManagable.AddInfo("Running service");
                             }
                             break;
                         case "uninstall":
@@ -64,11 +64,11 @@ namespace ASTAService
                             uninstallService.Uninstall(serviceName);
                             if (!ServiceInstallerUtility.Uninstall())
                             {
-                                //  MessageBox.Show("Failed to uninstall service");
+                                serviceManagable.AddInfo("Failed to uninstall service");
                             }
                             else
                             {
-                                //      MessageBox.Show("Service stopped. Goodbye.");
+                                serviceManagable.AddInfo("Service stopped. Goodbye.");
                             }
 
                             string processName = System.IO.Path.GetFileName(ServiceInstallerUtility.serviceExePath);

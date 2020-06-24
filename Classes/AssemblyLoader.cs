@@ -4,7 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.IO.Compression;
 
-namespace ASTAService
+namespace ASTAWebClient
 {
     internal static class AssemblyLoader
     {

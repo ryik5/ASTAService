@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ASTAService
+namespace ASTAWebClient
 {
     /// <summary>
     /// using in other class 
