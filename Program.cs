@@ -9,9 +9,10 @@ namespace ASTAWebClient
         /// <summary>
         /// The main entry point for the application
         /// </summary>
-        /// <param name="args"> Parameters for install: ASTAService.exe -i, uninstall: ASTAService.exe -u </param>
+        /// <param name="args"> Parameters for install: AstaWebClient.exe -i, uninstall: AstaWebClient.exe -u </param>
         static void Main(string[] args)
         {
+            //load libraries from this assembly
             AssemblyLoader.RegisterAssemblyLoader();
 
             IServiceManageable serviceManagable = new ServiceManager();

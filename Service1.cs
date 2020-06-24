@@ -5,22 +5,22 @@ namespace ASTAWebClient
     public partial class AstaWebClient : ServiceBase
     {
 
-        IServiceManageable _serviceManagable;
+        IServiceManageable serviceManagable;
         public AstaWebClient(IServiceManageable serviceManagable)
         {
             InitializeComponent();
-            _serviceManagable = serviceManagable;
+            this.serviceManagable = serviceManagable;
         }
 
 
         protected override void OnStart(string[] args)
         {
-            _serviceManagable.OnStart();
+            serviceManagable.OnStart();
         }
 
         protected override void OnStop()
         {
-            _serviceManagable.OnStop();
+            serviceManagable.OnStop();
         }
     }
 }
