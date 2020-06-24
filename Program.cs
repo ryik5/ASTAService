@@ -5,8 +5,6 @@ namespace ASTAWebClient
 {
     static class Program
     {
-        static AstaServiceLocal service = null;
-        static IServiceManageable serviceManagable = null;
 
         /// <summary>
         /// The main entry point for the application
@@ -16,11 +14,13 @@ namespace ASTAWebClient
         {
             AssemblyLoader.RegisterAssemblyLoader();
 
-            WindowsServiceClass uninstallService = new WindowsServiceClass();
-            uninstallService.EvntInfoMessage += UninstallService_EvntInfoMessage;
+            IServiceManageable serviceManagable = new ServiceManager();
 
-            serviceManagable = new ServiceManager(); 
-            service = new AstaServiceLocal(serviceManagable);
+            WindowsServiceClass uninstallService = new WindowsServiceClass();
+            uninstallService.EvntInfoMessage += (x, e) => serviceManagable.AddInfo(e.Message);
+
+            //class Name matched installing services (public partial class from Program.cs)
+            AstaWebClient service = new AstaWebClient(serviceManagable);
 
             if (args?.Length > 0)
             {
@@ -28,9 +28,7 @@ namespace ASTAWebClient
                     serviceManagable.AddInfo($"Got environment argument '{str}'");
             }
 
-            ServiceBase[] ServicesToRun;
-
-            ServicesToRun = new ServiceBase[]
+            ServiceBase[] ServicesToRun = new ServiceBase[]
             {
                 service
             };
@@ -82,23 +80,11 @@ namespace ASTAWebClient
                             break;
                     }
                 }
-
-                //Console.CancelKeyPress += (x, y) => service.Stop();
-                //ServiceInstallerUtility.Install();
-                //Console.WriteLine("Running service, press a key to stop");
-                //Console.ReadKey();
-                //service.Stop();
-                //Console.WriteLine("Service stopped. Goodbye.");
             }
             else
             {
                 ServiceBase.Run(ServicesToRun);
             }
-        }
-
-        private static void UninstallService_EvntInfoMessage(object sender, TextEventArgs e)
-        {
-            serviceManagable.AddInfo(e.Message);
         }
     }
 }

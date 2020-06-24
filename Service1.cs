@@ -2,11 +2,11 @@
 
 namespace ASTAWebClient
 {
-    public partial class AstaServiceLocal : ServiceBase
+    public partial class AstaWebClient : ServiceBase
     {
 
         IServiceManageable _serviceManagable;
-        public AstaServiceLocal(IServiceManageable serviceManagable)
+        public AstaWebClient(IServiceManageable serviceManagable)
         {
             InitializeComponent();
             _serviceManagable = serviceManagable;

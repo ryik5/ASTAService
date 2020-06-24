@@ -12,7 +12,7 @@ namespace ASTAWebClient
         private Thread dirWatcherThread = null;
         private Thread webThread = null;
         DirectoryWatchLogger direcoryWatcherlog = null;
-        static readonly Logger log = new Logger();
+         readonly Logger log = new Logger();
 
         WebSocketManager webSocket;
         static readonly string webSocketUri = "ws://10.0.102.54:5000/path";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
@@ -101,6 +101,7 @@ namespace ASTAWebClient
             timer.Elapsed += new ElapsedEventHandler(timer_Elapsed);
             timer.Enabled = true;
             timer.Start();
+            AddInfo("timer is running...");
         }
 
         private void StartDirWatcherThread()
@@ -153,8 +154,9 @@ namespace ASTAWebClient
             try
             {
                 timer.Enabled = false;
-                timer.Stop();
-                timer.Dispose();
+                timer?.Stop();
+                timer?.Dispose();
+                AddInfo("timer was stoped");
             }
             catch { }
         }

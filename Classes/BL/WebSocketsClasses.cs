@@ -2,6 +2,7 @@
 using Alchemy.Classes;
 using Newtonsoft.Json;
 using System;
+using System.Text;
 using System.Threading;
 
 namespace ASTAWebClient
@@ -86,10 +87,11 @@ namespace ASTAWebClient
             webClient?.Disconnect();
         }
 
+        StringBuilder sb;
         private void OnClientReceive(UserContext context)
         {
             var data = context.DataFrame.ToString();
-
+            string message;
             EvntInfoMessage?.Invoke(this, new TextEventArgs($"От сервера получено сообщение: {data}"));
 
             try
@@ -103,10 +105,21 @@ namespace ASTAWebClient
                         EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка кода не написана - Register: {obj?.Data?.Value}"));
                         break;
                     case (int)CommandType.Message:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение: {obj?.Data?.Value}"));
+                        message = obj?.Data?.Value;
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение: {message}"));
+                        if (message.Equals("CollectData"))
+                        {
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Начать сбор данных..."));
+                            GetMetrics metrics = new GetMetrics();
+                            sb = metrics.GetMetrics_Do();
+                            Send(ResponseType.Message, sb.ToString());
+                        }
                         break;
                     case (int)CommandType.NameChange:
                         EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка код не написана - NameChange: {obj?.Data?.Value}"));
+                        break;
+                    case (int)CommandType.DoWork:
+                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка код не написана - DoWork: {obj?.Data?.Value}"));
                         break;
                     default:
                         EvntInfoMessage?.Invoke(this, new TextEventArgs($"Неизвестный код сообщения: {obj?.Data?.Value}"));
@@ -143,6 +156,5 @@ namespace ASTAWebClient
             EvntInfoMessage?.Invoke(this, new TextEventArgs("Закрываю websocket..."));
             webClient.Disconnect();
         }
-
     }
 }

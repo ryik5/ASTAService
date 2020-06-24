@@ -1,6 +1,6 @@
 ﻿namespace ASTAWebClient
 {
-    partial class AstaServiceLocal
+    partial class AstaWebClient
     {
         /// <summary> 
         /// Required designer variable.

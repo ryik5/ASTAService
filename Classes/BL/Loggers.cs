@@ -88,9 +88,9 @@ namespace ASTAWebClient
 
         public Logger() { }
 
-        public void WriteString(string text)
+        public void WriteString(string text, string eventText="Message")
         {
-            RecordEntry("Message", text);
+            RecordEntry(eventText, text);
         }
         private void RecordEntry(string eventText, string text)
         {
