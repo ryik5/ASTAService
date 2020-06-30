@@ -110,8 +110,8 @@ namespace ASTAWebClient
                         if (message.Equals("CollectData"))
                         {
                         EvntInfoMessage?.Invoke(this, new TextEventArgs($"Начать сбор данных..."));
-                            GetMetrics metrics = new GetMetrics();
-                            sb = metrics.GetMetrics_Do();
+                            IMetricsable metrics = new MetricsOperator();
+                            sb = metrics.GetMetrics();
                             Send(ResponseType.Message, sb.ToString());
                         }
                         break;

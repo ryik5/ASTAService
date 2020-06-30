@@ -4,7 +4,6 @@ using System.Threading;
 
 namespace ASTAWebClient
 {
-
     public class DirectoryWatchLogger
     {
         System.IO.FileSystemWatcher watcher;
@@ -13,7 +12,6 @@ namespace ASTAWebClient
         bool enabled = true;
         public delegate void InfoMessage(object sender, TextEventArgs e);
         public event InfoMessage EvntInfoMessage;
-        public bool IsReady { get { return pathToDir != null && System.IO.Directory.Exists(pathToDir); } }
 
         public DirectoryWatchLogger() { }
         public DirectoryWatchLogger(string pathToDir)

@@ -4,11 +4,11 @@ using System.Text;
 
 namespace ASTAWebClient
 {
-   public class GetMetrics
+   public class MetricsOperator: IMetricsable
     {
         StringBuilder sb = new StringBuilder();
 
-        public StringBuilder GetMetrics_Do()
+        public StringBuilder GetMetrics()
         {
             ManagementObjectCollection moReturn;
             ManagementObjectSearcher moSearch;

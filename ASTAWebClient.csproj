@@ -74,8 +74,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Classes\AssemblyLoader.cs" />
-    <Compile Include="Classes\BL\GetMetrics.cs" />
+    <Compile Include="Classes\BL\MetricsOperator.cs" />
     <Compile Include="Classes\BL\ServiceManager.cs" />
+    <Compile Include="Classes\IMetricsable.cs" />
     <Compile Include="Classes\IServiceManageable.cs" />
     <Compile Include="Classes\BL\Loggers.cs" />
     <Compile Include="Classes\ServiceInstallClasses.cs">
