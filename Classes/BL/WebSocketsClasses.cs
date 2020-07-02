@@ -27,7 +27,7 @@ namespace ASTAWebClient
         Message = 2,
         NameChange = 3,
         UserCount = 4,
-        ReadyToWork=254,
+        ReadyToWork = 254,
         Error = 255
     }
     /// <summary>
@@ -52,26 +52,13 @@ namespace ASTAWebClient
         {
             get
             {
-                if (webClient != null)
-                    return webClient.Connected;
-                else
-                    return false;
+                return isConnected();
             }
         }
-        public WebSocketManager(string webSocketUri)
+
+        private bool isConnected()
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Инициализация websocket client с Uri: " + webSocketUri));
-
-            webClient = new WebSocketClient(webSocketUri)
-            {
-                OnReceive = OnClientReceive,
-                ConnectTimeout = TimeSpan.FromMilliseconds(5000),
-                OnDisconnect = OnClientDisconnect
-            };
-
-            webClient.Connect();
-
-            if (webClient.Connected && webClient.ReadyState == WebSocketClient.ReadyStates.OPEN)
+            if (webClient!=null && webClient.Connected && webClient.ReadyState == WebSocketClient.ReadyStates.OPEN)
             {
                 EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение не установлено"));
             }
@@ -79,12 +66,66 @@ namespace ASTAWebClient
             {
                 EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение установлено"));
             }
+
+            try
+            {
+                if (webClient.ReadyState == WebSocketClient.ReadyStates.OPEN)
+                    return true;
+                else return false;
+            }
+            catch { return false; }
+        }
+        public WebSocketManager(string webSocketUri)
+        {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Инициализация websocket client с Uri: " + webSocketUri));
+
+            webClient = new WebSocketClient(webSocketUri)
+            {
+             //   OnReceive = OnClientReceive,
+                ConnectTimeout = TimeSpan.FromMilliseconds(1000),
+             //   OnDisconnect = OnClientDisconnect
+            };
+
+            //try
+            //{
+            //  //  webClient.Connect();
+            //    Thread.Sleep(2000);
+            //    if (webClient.Connected)
+            //    {
+            //        webClient.OnReceive = OnClientReceive;
+            //        //      webClient.ConnectTimeout = TimeSpan.FromMilliseconds(5000);
+            //        webClient.OnDisconnect = OnClientDisconnect;
+            //    }
+            //}
+            //catch { }
+
+            //webClient.Connect();
+
+         }
+
+        public void Connect()
+        {
+            try
+            {
+                //  webClient.Connect();
+                Thread.Sleep(2000);
+                if (webClient.Connected)
+                {
+                    webClient.OnReceive = OnClientReceive;
+                    //      webClient.ConnectTimeout = TimeSpan.FromMilliseconds(5000);
+                    webClient.OnDisconnect = OnClientDisconnect;
+                }
+            }
+            catch {
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение не установлено"));
+            }
         }
 
         private void OnClientDisconnect(UserContext context)
         {
             context.Send("Disconnecting");
-            webClient?.Disconnect();
+            if (webClient != null && webClient.Connected)
+                webClient?.Disconnect();
         }
 
         StringBuilder sb;
@@ -109,7 +150,7 @@ namespace ASTAWebClient
                         EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение: {message}"));
                         if (message.Equals("CollectData"))
                         {
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Начать сбор данных..."));
+                            EvntInfoMessage?.Invoke(this, new TextEventArgs($"Начать сбор данных..."));
                             IMetricsable metrics = new MetricsOperator();
                             sb = metrics.GetMetrics();
                             Send(ResponseType.Message, sb.ToString());
@@ -134,7 +175,7 @@ namespace ASTAWebClient
             //context.Send(data);
         }
 
-        public void Send(ResponseType   type,string data)
+        public void Send(ResponseType type, string data)
         {
             EvntInfoMessage?.Invoke(this, new TextEventArgs($"Отправляю сообщение: '{data}'"));
 
@@ -142,7 +183,7 @@ namespace ASTAWebClient
 
             dynamic obj = JsonConvert.SerializeObject(r);
 
-            if (webClient.Connected)
+            if (webClient != null && webClient.Connected)
                 webClient.Send(obj);
 
             if (!messageReceiveEvent.WaitOne(7000))                         // waiting for the response with 5 secs timeout
@@ -153,8 +194,10 @@ namespace ASTAWebClient
 
         public void Close()
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Закрываю websocket..."));
-            webClient.Disconnect();
+            //EvntInfoMessage?.Invoke(this, new TextEventArgs("Закрываю websocket..."));
+            //if (webClient!=null&& webClient.Connected)
+            //    webClient.Disconnect();
+
         }
     }
 }

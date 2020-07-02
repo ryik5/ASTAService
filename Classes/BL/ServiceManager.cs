@@ -48,7 +48,18 @@ namespace ASTAWebClient
 
             //Запускаем процедуру (чего хотим выполнить по таймеру).
             if (CheckAliveServer())
+            {
+                try
+                { 
+                 //   webSocket.Connect();
+                }
+                catch (Exception err)
+                {
+                    AddInfo($"{err.ToString()}");
+                }
+
                 SendMessage(ResponseType.ReadyToWork, "254");
+            }
 
             timer.Enabled = true;
             timer.Start();
@@ -84,8 +95,10 @@ namespace ASTAWebClient
         Thread webThread = null;
         private void StartWebsocketClient()
         {
+
             webSocket = new WebSocketManager(webSocketUri);
             webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(WebsocketClient_EvntInfoMessage);
+           
         }
         private void StartWebsocketClientThread()
         {
@@ -110,11 +123,15 @@ namespace ASTAWebClient
                 }
                 else
                 {
-                    System.Threading.Tasks.Task.Run(() => StopWebsocketClient());
+                    //AddInfo("Останавливаю клиента....");
+                    //System.Threading.Tasks.Task.Run(() => StopWebsocketClient());
                 }
             }
             else
             {
+                AddInfo("Останавливаю клиента....");
+                StopWebsocketClient();
+
                 AddInfo("Создаю подключение....");
                 System.Threading.Tasks.Task.Run(() => StartWebsocketClientThread());
             }
