@@ -46,86 +46,74 @@ namespace ASTAWebClient
     {
         private AutoResetEvent messageReceiveEvent = new AutoResetEvent(false);
         private WebSocketClient webClient;
+        private string webSocketUri { get; set; }
         public delegate void InfoMessage(object sender, TextEventArgs e);
         public event InfoMessage EvntInfoMessage;
-        public bool Connected
+        public bool Connected()
         {
-            get
+            if (webClient != null && webClient.Connected && webClient.ReadyState == WebSocketClient.ReadyStates.OPEN)
             {
-                return isConnected();
-            }
-        }
-
-        private bool isConnected()
-        {
-            if (webClient!=null && webClient.Connected && webClient.ReadyState == WebSocketClient.ReadyStates.OPEN)
-            {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение не установлено"));
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Клиент подключен к серверу..."));
             }
             else
             {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение установлено"));
+                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение еще не было установлено..."));
+
+                Connect(webSocketUri);
             }
 
             try
             {
-                if (webClient.ReadyState == WebSocketClient.ReadyStates.OPEN)
+                if (webClient != null && webClient.Connected&& webClient.ReadyState == WebSocketClient.ReadyStates.OPEN)
                     return true;
-                else return false;
+                else 
+                    return false;
             }
             catch { return false; }
         }
+
         public WebSocketManager(string webSocketUri)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Инициализация websocket client с Uri: " + webSocketUri));
-
-            webClient = new WebSocketClient(webSocketUri)
-            {
-             //   OnReceive = OnClientReceive,
-                ConnectTimeout = TimeSpan.FromMilliseconds(1000),
-             //   OnDisconnect = OnClientDisconnect
-            };
-
-            //try
-            //{
-            //  //  webClient.Connect();
-            //    Thread.Sleep(2000);
-            //    if (webClient.Connected)
-            //    {
-            //        webClient.OnReceive = OnClientReceive;
-            //        //      webClient.ConnectTimeout = TimeSpan.FromMilliseconds(5000);
-            //        webClient.OnDisconnect = OnClientDisconnect;
-            //    }
-            //}
-            //catch { }
-
-            //webClient.Connect();
-
+            this.webSocketUri = webSocketUri;
          }
 
-        public void Connect()
+        
+        private void Connect(string webSocketUr)
         {
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Инициализация websocket client с Uri: " + webSocketUr));
+
             try
             {
-                //  webClient.Connect();
-                Thread.Sleep(2000);
-                if (webClient.Connected)
+                webClient = new WebSocketClient(webSocketUr)
+                {                 
+                    ConnectTimeout = TimeSpan.FromMilliseconds(3000)                  
+                };
+
+                webClient.Connect();
+                Thread.Sleep(1000);
+                if (webClient!=null&& webClient.Connected)
                 {
                     webClient.OnReceive = OnClientReceive;
-                    //      webClient.ConnectTimeout = TimeSpan.FromMilliseconds(5000);
                     webClient.OnDisconnect = OnClientDisconnect;
                 }
+                else
+                {
+                    webClient = null;
+                }
             }
-            catch {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение не установлено"));
+            catch
+            {
+                webClient = null;
             }
         }
 
         private void OnClientDisconnect(UserContext context)
         {
-            context.Send("Disconnecting");
             if (webClient != null && webClient.Connected)
+            {
+                context.Send("Disconnecting");
                 webClient?.Disconnect();
+            }
         }
 
         StringBuilder sb;
@@ -194,10 +182,9 @@ namespace ASTAWebClient
 
         public void Close()
         {
-            //EvntInfoMessage?.Invoke(this, new TextEventArgs("Закрываю websocket..."));
-            //if (webClient!=null&& webClient.Connected)
-            //    webClient.Disconnect();
-
+            EvntInfoMessage?.Invoke(this, new TextEventArgs("Закрываю websocket..."));
+            if (webClient != null && webClient.Connected)
+                webClient.Disconnect();
         }
     }
 }

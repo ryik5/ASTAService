@@ -54,8 +54,8 @@
     <StartupObject>ASTAWebClient.Program</StartupObject>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Alchemy, Version=2.2.0.238, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\Alchemy.2.2.1\lib\net40\Alchemy.dll</HintPath>
+    <Reference Include="Alchemy">
+      <HintPath>Resources\Alchemy.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">

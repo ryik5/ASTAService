@@ -90,15 +90,20 @@ namespace ASTAWebClient
         }
 
 
-        readonly string webSocketUri = "ws://10.0.102.54:5000/path";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
+        readonly string webSocketUri = "ws://172.17.1167.10:5000/path";//"ws://10.0.102.54:5000/path";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
         WebSocketManager webSocket;
         Thread webThread = null;
         private void StartWebsocketClient()
         {
 
-            webSocket = new WebSocketManager(webSocketUri);
-            webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(WebsocketClient_EvntInfoMessage);
-           
+            try
+            {
+                webSocket = new WebSocketManager(webSocketUri);
+
+                webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(WebsocketClient_EvntInfoMessage);
+                webSocket.Connected();
+            }
+            catch { }
         }
         private void StartWebsocketClientThread()
         {
@@ -115,27 +120,35 @@ namespace ASTAWebClient
         }
         private bool CheckAliveServer()
         {
-            if (webSocket != null)
+            try
             {
-                if (webSocket.Connected)
+                if (webSocket != null)
                 {
-                    return true;
+                    if (webSocket.Connected())
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        return false;
+                        //AddInfo("Останавливаю клиента....");
+                        //System.Threading.Tasks.Task.Run(() => StopWebsocketClient());
+                    }
                 }
                 else
                 {
-                    //AddInfo("Останавливаю клиента....");
-                    //System.Threading.Tasks.Task.Run(() => StopWebsocketClient());
-                }
-            }
-            else
-            {
-                AddInfo("Останавливаю клиента....");
-                StopWebsocketClient();
+                    AddInfo("Останавливаю клиента....");
+                    StopWebsocketClient();
 
-                AddInfo("Создаю подключение....");
-                System.Threading.Tasks.Task.Run(() => StartWebsocketClientThread());
+                    AddInfo("Создаю подключение....");
+                    StartWebsocketClientThread();
+                }
+                return false;
             }
-            return false;
+            catch
+            {
+                return false;
+            }
         }
         private void SendMessage(ResponseType type, string text)
         {
