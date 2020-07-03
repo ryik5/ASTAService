@@ -48,8 +48,6 @@ namespace ASTAWebClient
     public class WebSocketManager
     {
         private AutoResetEvent messageReceiveEvent = new AutoResetEvent(false);
-        private AutoResetEvent openedEvent = new AutoResetEvent(false);
-        private AutoResetEvent openingErrorEvent = new AutoResetEvent(false);
         private AutoResetEvent reRunClientEvent = new AutoResetEvent(false);
         //  private WebSocketClient webClient;
         WebSocket webClient;
@@ -65,8 +63,6 @@ namespace ASTAWebClient
                 else
                 { return true; }
 
-
-                //Close();
                 reRunClientEvent.WaitOne(1000);
             }
 
@@ -87,9 +83,7 @@ namespace ASTAWebClient
         private void websocket_Error(object sender, ErrorEventArgs e)
         {
             Status("Ошибка открытия сокета...");
-            //   openingErrorEvent.WaitOne(1000);
             webClient?.Close();
-
         }
 
         protected void webSocketClient_DataReceived(object sender, DataReceivedEventArgs e)
@@ -135,7 +129,7 @@ namespace ASTAWebClient
             if (webClient != null && webClient.State == WebSocketState.Open)
                 webClient.Send(obj);
 
-            if (!messageReceiveEvent.WaitOne(7000))                         // waiting for the response with 5 secs timeout
+            if (!messageReceiveEvent.WaitOne(5000))                         // waiting for the response with 5 secs timeout
             {
                 Status("Подтверждение от сервера о получении сообщения не получено. Timeout.");
             }
@@ -153,15 +147,14 @@ namespace ASTAWebClient
 
 
         StringBuilder sb;
-        private void ConvertMessage(string context)
+        private void ConvertMessage(string text)
         {
-            var data = context;
             string message;
-            Status($"От сервера получено сообщение: {data}");
+            Status($"От сервера получено сообщение: {text}");
 
             try
             {
-                dynamic obj = JsonConvert.DeserializeObject(data);
+                dynamic obj = JsonConvert.DeserializeObject(text);
                 Message($"Десериализованные данные: {obj}");
 
                 switch ((int)obj.Type)
@@ -174,7 +167,7 @@ namespace ASTAWebClient
                         Message($"Полученное сообщение: {message}");
                         if (message.Equals("SendCollectedData"))
                         {
-                            Message($"Начать сбор данных...");
+                            Status($"Начать сбор данных...");
                             IMetricsable metrics = new MetricsOperator();
                             sb = metrics.GetMetrics();
                             Send(ResponseType.Message, sb.ToString());
@@ -194,7 +187,7 @@ namespace ASTAWebClient
             }
             catch
             {
-                Message($"Полученное сообщение не обработано: {data}");
+                Message($"Полученное сообщение не обработано: {text}");
             }
         }
     }
