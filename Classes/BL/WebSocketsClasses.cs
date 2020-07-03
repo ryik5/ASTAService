@@ -1,9 +1,12 @@
-﻿using Alchemy;
-using Alchemy.Classes;
+﻿//using Alchemy;
+//using Alchemy.Classes;
+//using Newtonsoft.Json;
 using Newtonsoft.Json;
+using SuperSocket.ClientEngine;
 using System;
 using System.Text;
 using System.Threading;
+using WebSocket4Net;
 
 namespace ASTAWebClient
 {
@@ -45,146 +48,154 @@ namespace ASTAWebClient
     public class WebSocketManager
     {
         private AutoResetEvent messageReceiveEvent = new AutoResetEvent(false);
-        private WebSocketClient webClient;
+        private AutoResetEvent openedEvent = new AutoResetEvent(false);
+        private AutoResetEvent openingErrorEvent = new AutoResetEvent(false);
+        private AutoResetEvent reRunClientEvent = new AutoResetEvent(false);
+        //  private WebSocketClient webClient;
+        WebSocket webClient;
         private string webSocketUri { get; set; }
-        public delegate void InfoMessage(object sender, TextEventArgs e);
-        public event InfoMessage EvntInfoMessage;
+        public Action<string> Status { get; set; }
+        public Action<string> Message { get; set; }
         public bool Connected()
         {
-            if (webClient != null && webClient.Connected && webClient.ReadyState == WebSocketClient.ReadyStates.OPEN)
+            if (webClient != null)
             {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Клиент подключен к серверу..."));
+                if (webClient.State != WebSocketState.Open)
+                { webClient.Open(); }
+                else
+                { return true; }
+
+
+                //Close();
+                reRunClientEvent.WaitOne(1000);
             }
+
+            if (webClient.State == WebSocketState.Open)
+                return true;
             else
-            {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подключение еще не было установлено..."));
+                return false;
+        }
 
-                Connect(webSocketUri);
-            }
 
-            try
+        private void websocket_MessageReceived(object sender, MessageReceivedEventArgs e)
+        {
+            ConvertMessage(e.Message);
+
+            messageReceiveEvent.Set();
+        }
+
+        private void websocket_Error(object sender, ErrorEventArgs e)
+        {
+            Status("Ошибка открытия сокета...");
+            //   openingErrorEvent.WaitOne(1000);
+            webClient?.Close();
+
+        }
+
+        protected void webSocketClient_DataReceived(object sender, DataReceivedEventArgs e)
+        {
+            Message(Encoding.UTF8.GetString(e.Data));
+            messageReceiveEvent.Set();
+        }
+
+        private void websocket_Closed(object sender, EventArgs e)
+        {
+            if (webClient != null)
             {
-                if (webClient != null && webClient.Connected&& webClient.ReadyState == WebSocketClient.ReadyStates.OPEN)
-                    return true;
-                else 
-                    return false;
+                Status("Websocket закрыт.");
             }
-            catch { return false; }
+        }
+
+        private void websocket_Opened(object sender, EventArgs e)
+        {
+            Status("Сокет открыт...");
         }
 
         public WebSocketManager(string webSocketUri)
         {
             this.webSocketUri = webSocketUri;
-         }
 
-        
-        private void Connect(string webSocketUr)
+            webClient = new WebSocket(webSocketUri);//создаем вебсокет
+            webClient.Opened += new EventHandler(websocket_Opened);//событие возникающее в момент открытия
+            webClient.Error += new EventHandler<ErrorEventArgs>(websocket_Error); //событие возникающее при ошибке
+            webClient.Closed += new EventHandler(websocket_Closed); //событие закрытия
+            webClient.MessageReceived += new EventHandler<MessageReceivedEventArgs>(websocket_MessageReceived);//получение сообщений
+            webClient.DataReceived += new EventHandler<DataReceivedEventArgs>(webSocketClient_DataReceived);
+        }
+
+
+        public void Send(ResponseType type, string data)
         {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Инициализация websocket client с Uri: " + webSocketUr));
+            Status($"Отправляю сообщение: '{data}'");
 
-            try
+            var r = new Response { Type = type, Data = data };
+
+            dynamic obj = JsonConvert.SerializeObject(r);
+
+            if (webClient != null && webClient.State == WebSocketState.Open)
+                webClient.Send(obj);
+
+            if (!messageReceiveEvent.WaitOne(7000))                         // waiting for the response with 5 secs timeout
             {
-                webClient = new WebSocketClient(webSocketUr)
-                {                 
-                    ConnectTimeout = TimeSpan.FromMilliseconds(3000)                  
-                };
-
-                webClient.Connect();
-                Thread.Sleep(1000);
-                if (webClient!=null&& webClient.Connected)
-                {
-                    webClient.OnReceive = OnClientReceive;
-                    webClient.OnDisconnect = OnClientDisconnect;
-                }
-                else
-                {
-                    webClient = null;
-                }
+                Status("Подтверждение от сервера о получении сообщения не получено. Timeout.");
             }
-            catch
+        }
+
+        public void DestroyClient()
+        {
+            if (webClient != null)
             {
+                webClient?.Close();
+                webClient?.Dispose();
                 webClient = null;
             }
         }
 
-        private void OnClientDisconnect(UserContext context)
-        {
-            if (webClient != null && webClient.Connected)
-            {
-                context.Send("Disconnecting");
-                webClient?.Disconnect();
-            }
-        }
 
         StringBuilder sb;
-        private void OnClientReceive(UserContext context)
+        private void ConvertMessage(string context)
         {
-            var data = context.DataFrame.ToString();
+            var data = context;
             string message;
-            EvntInfoMessage?.Invoke(this, new TextEventArgs($"От сервера получено сообщение: {data}"));
+            Status($"От сервера получено сообщение: {data}");
 
             try
             {
                 dynamic obj = JsonConvert.DeserializeObject(data);
-                EvntInfoMessage?.Invoke(this, new TextEventArgs($"Десериализованные данные: {obj}"));
+                Message($"Десериализованные данные: {obj}");
 
                 switch ((int)obj.Type)
                 {
                     case (int)CommandType.Register:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка кода не написана - Register: {obj?.Data?.Value}"));
+                        Message($"Обработка кода не написана - Register: {obj?.Data?.Value}");
                         break;
                     case (int)CommandType.Message:
                         message = obj?.Data?.Value;
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение: {message}"));
-                        if (message.Equals("CollectData"))
+                        Message($"Полученное сообщение: {message}");
+                        if (message.Equals("SendCollectedData"))
                         {
-                            EvntInfoMessage?.Invoke(this, new TextEventArgs($"Начать сбор данных..."));
+                            Message($"Начать сбор данных...");
                             IMetricsable metrics = new MetricsOperator();
                             sb = metrics.GetMetrics();
                             Send(ResponseType.Message, sb.ToString());
                         }
                         break;
                     case (int)CommandType.NameChange:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка код не написана - NameChange: {obj?.Data?.Value}"));
+                        Message($"Обработка код не написана - NameChange: {obj?.Data?.Value}");
                         break;
                     case (int)CommandType.DoWork:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Обработка код не написана - DoWork: {obj?.Data?.Value}"));
+                        Message($"Обработка код не написана - DoWork: {obj?.Data?.Value}");
                         break;
                     default:
-                        EvntInfoMessage?.Invoke(this, new TextEventArgs($"Неизвестный код сообщения: {obj?.Data?.Value}"));
+                        Message($"Неизвестный код сообщения: {obj?.Data?.Value}");
                         break;
 
                 }
             }
-            catch (Exception err)
+            catch
             {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs($"Полученное сообщение не распознано: {err.Message}"));
+                Message($"Полученное сообщение не обработано: {data}");
             }
-            //context.Send(data);
-        }
-
-        public void Send(ResponseType type, string data)
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs($"Отправляю сообщение: '{data}'"));
-
-            var r = new Response { Type = type, Data = data };
-
-            dynamic obj = JsonConvert.SerializeObject(r);
-
-            if (webClient != null && webClient.Connected)
-                webClient.Send(obj);
-
-            if (!messageReceiveEvent.WaitOne(7000))                         // waiting for the response with 5 secs timeout
-            {
-                EvntInfoMessage?.Invoke(this, new TextEventArgs("Подтверждение от сервера о получении сообщения не получено. Timeout."));
-            }
-        }
-
-        public void Close()
-        {
-            EvntInfoMessage?.Invoke(this, new TextEventArgs("Закрываю websocket..."));
-            if (webClient != null && webClient.Connected)
-                webClient.Disconnect();
         }
     }
 }

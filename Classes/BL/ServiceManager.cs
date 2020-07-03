@@ -20,18 +20,22 @@ namespace ASTAWebClient
         public void OnStop()
         {
             StopTimer();
-            StopWebsocketClient();
+            StopWebsocket();
             StopDirWatcher();
         }
 
+
+        #region Logger
         readonly Logger log = new Logger();
         public void AddInfo(string text)
         {
             if (log != null)
                 log.WriteString(text);
         }
+        #endregion
 
 
+        #region Timer
         System.Timers.Timer timer = null;
         private void StartTimer()
         {
@@ -49,23 +53,16 @@ namespace ASTAWebClient
             //Запускаем процедуру (чего хотим выполнить по таймеру).
             if (CheckAliveServer())
             {
-                try
-                { 
-                 //   webSocket.Connect();
-                }
-                catch (Exception err)
-                {
-                    AddInfo($"{err.ToString()}");
-                }
-
                 SendMessage(ResponseType.ReadyToWork, "254");
             }
 
             timer.Enabled = true;
             timer.Start();
         }
+        #endregion
 
 
+        #region Directory watcher
         DirectoryWatchLogger direcoryWatcherlog = null;
         Thread dirWatcherThread = null;
         private void StartDirWatcher()
@@ -88,87 +85,91 @@ namespace ASTAWebClient
         {
             SendMessage(ResponseType.Message, e.Message);
         }
+        #endregion
 
 
-        readonly string webSocketUri = "ws://172.17.1167.10:5000/path";//"ws://10.0.102.54:5000/path";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
-        WebSocketManager webSocket;
-        Thread webThread = null;
-        private void StartWebsocketClient()
-        {
-
-            try
-            {
-                webSocket = new WebSocketManager(webSocketUri);
-
-                webSocket.EvntInfoMessage += new WebSocketManager.InfoMessage(WebsocketClient_EvntInfoMessage);
-                webSocket.Connected();
-            }
-            catch { }
-        }
+        #region WebSocket Client
         private void StartWebsocketClientThread()
         {
+            if (webThread != null || webSocket != null)
+            {
+                StopWebsocket();
+                return;
+            }
+
             webThread = new Thread(new ThreadStart(StartWebsocketClient));
             webThread.SetApartmentState(ApartmentState.STA);
             webThread.IsBackground = true;
 
             webThread.Start();
         }
-        private void WebsocketClient_EvntInfoMessage(object sender, TextEventArgs e)
+
+        readonly string webSocketUri = "ws://10.0.102.54:5000/path";//"ws://172.17.1167.10:5000/path";// "wss://ws.binaryws.com/websockets/v3?app_id=1089";// "ws://localhost:5000";
+        WebSocketManager webSocket;
+        Thread webThread = null;
+        private void StartWebsocketClient()
         {
-            var json = e.Message;
-            AddInfo($"{json}");
+            webSocket = new WebSocketManager(webSocketUri);
+
+            webSocket.Message = WebsocketClient_EvntMessage;
+            webSocket.Status = AddInfo;
+
+            webSocket.Connected();
         }
+
+        private void WebsocketClient_EvntMessage(string e)
+        {
+            var json = e;
+            AddInfo($"Получена комманда: {json}");
+        }
+
         private bool CheckAliveServer()
         {
-            try
+            if (webSocket != null)
             {
-                if (webSocket != null)
-                {
-                    if (webSocket.Connected())
-                    {
-                        return true;
-                    }
-                    else
-                    {
-                        return false;
-                        //AddInfo("Останавливаю клиента....");
-                        //System.Threading.Tasks.Task.Run(() => StopWebsocketClient());
-                    }
-                }
+                if (webSocket.Connected())
+                { return true; }
                 else
-                {
-                    AddInfo("Останавливаю клиента....");
-                    StopWebsocketClient();
-
-                    AddInfo("Создаю подключение....");
-                    StartWebsocketClientThread();
-                }
-                return false;
+                { return false; }
             }
-            catch
+            else
             {
-                return false;
+                AddInfo("Создаю подключение....");
+                StartWebsocketClientThread();
             }
+            return false;
         }
         private void SendMessage(ResponseType type, string text)
         {
             webSocket.Send(type, text); //test webSocketServer
             AddInfo($"Отправлен текст: '{text}'");
         }
+        #endregion
 
 
+        #region Stop running jobs
         private void StopDirWatcher()
         {
             try { direcoryWatcherlog?.StopWatcher(); } catch { }
             try { dirWatcherThread?.Abort(); } catch { }
         }
-        private void StopWebsocketClient()
+        private void StopWebsocket()
         {
+            AddInfo("Останавливаю клиента....");
             try
             {
-                webSocket?.Close();
-                webSocket.EvntInfoMessage -= WebsocketClient_EvntInfoMessage;
+                webSocket?.DestroyClient();
+                webSocket.Message = null;
                 webSocket = null;
+            }
+            catch { }
+            try
+            {
+                if (webThread.IsAlive && webThread.ThreadState == ThreadState.Running)
+                {
+                    webThread.Abort();
+                }
+                webThread = null;
             }
             catch { }
         }
@@ -183,5 +184,7 @@ namespace ASTAWebClient
             }
             catch { }
         }
+        #endregion
+    
     }
 }
